@@ -539,3 +539,131 @@ func TestMarshalResult(t *testing.T) {
 		}`, string(res))
 	})
 }
+
+func TestMarshalResultWithFragments(t *testing.T) {
+	schemaStr := `
+
+	interface Widget {
+		id: ID!
+		color: String!
+	}
+
+	type Button implements Widget {
+		id: ID!
+		color: String!
+		label: String!
+	}
+
+	type Checkbox implements Widget {
+		id: ID!
+		color: String!
+		checked: Boolean!
+	}
+
+	type Query {
+		widgets: [Widget!]!
+	}
+	`
+
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: schemaStr})
+	query := gqlparser.MustLoadQuery(schema, `
+		query {
+			widgets {
+				id
+				color
+				... on Button {
+					label
+				}
+				... on Checkbox {
+					checked
+				}
+			}
+		}
+	`)
+
+	t.Run("OneButtonWidget", func(t *testing.T) {
+		var r map[string]interface{}
+		err := json.Unmarshal([]byte(`{
+			"widgets": [
+				{
+					"id": "1",
+					"color": "blue",
+					"label": "hello world"
+				}
+			]
+		}`), &r)
+		require.NoError(t, err)
+		res, err := marshalResult(r, query.Operations[0].SelectionSet, schema, &ast.Type{NamedType: "Query"})
+		assert.NoError(t, err)
+		jsonEqWithOrder(t, `{
+			"widgets": [
+				{
+					"id": "1",
+					"color": "blue",
+					"label": "hello world"
+				}
+			]
+		}`, string(res))
+	})
+
+	t.Run("OneCheckboxWidget", func(t *testing.T) {
+		var r map[string]interface{}
+		err := json.Unmarshal([]byte(`{
+			"widgets": [
+				{
+					"id": "2",
+					"color": "red",
+					"checked": true
+				}
+			]
+		}`), &r)
+		require.NoError(t, err)
+		res, err := marshalResult(r, query.Operations[0].SelectionSet, schema, &ast.Type{NamedType: "Query"})
+		assert.NoError(t, err)
+		jsonEqWithOrder(t, `{
+			"widgets": [
+				{
+					"id": "2",
+					"color": "red",
+					"checked": true
+				}
+			]
+		}`, string(res))
+	})
+
+	t.Run("TwoWidgets", func(t *testing.T) {
+		var r map[string]interface{}
+		err := json.Unmarshal([]byte(`{
+			"widgets": [
+				{
+					"id": "1",
+					"color": "blue",
+					"label": "hello world"
+				},
+				{
+					"id": "2",
+					"color": "red",
+					"checked": true
+				}
+			]
+		}`), &r)
+		require.NoError(t, err)
+		res, err := marshalResult(r, query.Operations[0].SelectionSet, schema, &ast.Type{NamedType: "Query"})
+		assert.NoError(t, err)
+		jsonEqWithOrder(t, `{
+			"widgets": [
+				{
+					"id": "1",
+					"color": "blue",
+					"label": "hello world"
+				},
+				{
+					"id": "2",
+					"color": "red",
+					"checked": true
+				}
+			]
+		}`, string(res))
+	})
+
+}
