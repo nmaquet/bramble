@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+// FIXME: dedupe result?
 func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, error) {
 	ptr := data
 	if len(insertionPoint) == 0 {
@@ -53,4 +54,8 @@ func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, er
 	default:
 		return nil, fmt.Errorf("extractBoundaryIDs: unexpected type: %T", ptr)
 	}
+}
+
+func buildBoundaryQueryDocuments(step QueryPlanStep, ids []string) ([]string, error) {
+	return nil, nil
 }
