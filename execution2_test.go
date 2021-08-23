@@ -59,12 +59,26 @@ func TestBuildBoundaryQueryDocuments(t *testing.T) {
 
 		type Query {
 			gizmos: [Gizmo!]!
+			getOwners(ids: [ID!]!): [Owner!]!
 		}
 	`
 	schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
 	boundaryField := BoundaryQuery{Query: "getOwners", Array: true}
 	ids := []string{"1", "2", "3"}
-	selectionSet := getSelectionSet(schema, "query { getOwners { id name } }")
+	selectionSet := []ast.Selection{
+		&ast.Field{
+			Alias:            "_id",
+			Name:             "id",
+			Definition:       schema.Types["Owner"].Fields.ForName("id"),
+			ObjectDefinition: schema.Types["Owner"],
+		},
+		&ast.Field{
+			Alias:            "name",
+			Name:             "name",
+			Definition:       schema.Types["Owner"].Fields.ForName("name"),
+			ObjectDefinition: schema.Types["Owner"],
+		},
+	}
 	step := QueryPlanStep{
 		ServiceURL:     "http://example.com:8080",
 		ServiceName:    "test",
@@ -73,12 +87,9 @@ func TestBuildBoundaryQueryDocuments(t *testing.T) {
 		InsertionPoint: []string{"gizmos", "owner"},
 		Then:           nil,
 	}
-	expected := []string{"TBD"}
-	docs, err := buildBoundaryQueryDocuments(step, ids, boundaryField)
+	expected := []string{`{ getOwners(ids: ["1", "2", "3"]) { _id: id name } }`}
+	ctx := testContextWithoutVariables(nil)
+	docs, err := buildBoundaryQueryDocuments(ctx, schema, step, ids, boundaryField)
 	require.NoError(t, err)
 	require.Equal(t, expected, docs)
-}
-
-func getSelectionSet(schema *ast.Schema, query string) ast.SelectionSet {
-	return gqlparser.MustLoadQuery(schema, query).Operations[0].SelectionSet
 }

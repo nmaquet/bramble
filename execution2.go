@@ -1,8 +1,12 @@
 package bramble
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
+
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // FIXME: dedupe result?
@@ -56,6 +60,15 @@ func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, er
 	}
 }
 
-func buildBoundaryQueryDocuments(step QueryPlanStep, ids []string, parentTypeBoundaryField BoundaryQuery) ([]string, error) {
-	return nil, nil
+func buildBoundaryQueryDocuments(ctx context.Context, schema *ast.Schema, step QueryPlanStep, ids []string, parentTypeBoundaryField BoundaryQuery) ([]string, error) {
+	if parentTypeBoundaryField.Array {
+		selectionSetQL := formatSelectionSetSingleLine(ctx, schema, step.SelectionSet)
+		qids := []string{}
+		for _, id := range ids {
+			qids = append(qids, fmt.Sprintf("%q", id))
+		}
+		idsQL := fmt.Sprintf("[%s]", strings.Join(qids, ", "))
+		return []string{fmt.Sprintf(`{ %s(ids: %s) %s }`, parentTypeBoundaryField.Query, idsQL, selectionSetQL)}, nil
+	}
+	panic("not implemented")
 }
