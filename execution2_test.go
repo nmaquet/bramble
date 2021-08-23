@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/vektah/gqlparser/v2"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 func TestExtractBoundaryIDs(t *testing.T) {
@@ -43,17 +45,40 @@ func TestExtractBoundaryIDs(t *testing.T) {
 }
 
 func TestBuildBoundaryQueryDocuments(t *testing.T) {
-	// f := PlanTestFixture1
-	// schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: f.Schema})
-	// operation := gqlparser.MustLoadQuery(schema, `{movies {id compTitles(limit: 42) { id title }}}`)
-	// plan, err := Plan(&PlanningContext{operation.Operations[0], schema, f.Locations, f.IsBoundary, map[string]*Service{
-	// 	"A": {Name: "A", ServiceURL: "A"},
-	// 	"B": {Name: "B", ServiceURL: "B"},
-	// 	"C": {Name: "C", ServiceURL: "C"},
-	// }})
-	// require.NoError(t, err)
-	// step := plan.RootSteps[0].Then[0].Then[0]
-	// ids := []string{"1", "2", "3"}
+	ddl := `
+		type Gizmo {
+			id: ID!
+			color: String!
+			owner: Owner
+		}
 
-	// Question for next time: what is the easiest way to get the field names and types for each boundary field?
+		type Owner {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmos: [Gizmo!]!
+		}
+	`
+	schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+	boundaryField := BoundaryQuery{Query: "getOwners", Array: true}
+	ids := []string{"1", "2", "3"}
+	selectionSet := getSelectionSet(schema, "query { getOwners { id name } }")
+	step := QueryPlanStep{
+		ServiceURL:     "http://example.com:8080",
+		ServiceName:    "test",
+		ParentType:     "Gizmo",
+		SelectionSet:   selectionSet,
+		InsertionPoint: []string{"gizmos", "owner"},
+		Then:           nil,
+	}
+	expected := []string{"TBD"}
+	docs, err := buildBoundaryQueryDocuments(step, ids, boundaryField)
+	require.NoError(t, err)
+	require.Equal(t, expected, docs)
+}
+
+func getSelectionSet(schema *ast.Schema, query string) ast.SelectionSet {
+	return gqlparser.MustLoadQuery(schema, query).Operations[0].SelectionSet
 }

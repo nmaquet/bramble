@@ -56,6 +56,6 @@ func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, er
 	}
 }
 
-func buildBoundaryQueryDocuments(step QueryPlanStep, ids []string) ([]string, error) {
+func buildBoundaryQueryDocuments(step QueryPlanStep, ids []string, parentTypeBoundaryField BoundaryQuery) ([]string, error) {
 	return nil, nil
 }
