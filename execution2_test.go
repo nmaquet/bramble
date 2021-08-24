@@ -254,6 +254,52 @@ func TestMergeExecutionResults(t *testing.T) {
 		}`)
 		require.Equal(t, expected, mergedMap)
 	})
+
+	t.Run("merges root step with child step", func(t *testing.T) {
+		inputMapA := jsonToInterfaceMap(`{
+			"gizmo": {
+				"id": "1",
+				"color": "Gizmo A",
+				"owner": {
+					"_id": "1"
+				}
+			}
+		}`)
+
+		resultA := ExecutionResult{
+			ServiceURL:     "http://service-a",
+			InsertionPoint: []string{},
+			Data:           inputMapA,
+		}
+
+		inputMapB := jsonToInterfaceMap(`{
+			"owner": {
+				"_0": "1",
+				"name": "Owner A"
+			}
+		}`)
+
+		resultB := ExecutionResult{
+			ServiceURL:     "http://service-b",
+			InsertionPoint: []string{"gizmo", "owner"},
+			Data:           inputMapB,
+		}
+
+		mergedMap := mergeExecutionResults([]ExecutionResult{resultA, resultB})
+
+		expected := jsonToInterfaceMap(`{
+			"gizmo": {
+				"id": "1",
+				"color": "Gizmo A",
+				"owner": {
+					"_0": "1",
+					"_id": "1",
+					"name": "Owner A"
+				}
+			}
+		}`)
+		require.Equal(t, expected, mergedMap)
+	})
 }
 
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {
