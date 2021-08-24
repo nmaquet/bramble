@@ -96,3 +96,33 @@ func batchBy(items []string, batchSize int) (batches [][]string) {
 
 	return append(batches, items)
 }
+
+type ExecutionResult struct {
+	ServiceURL     string
+	InsertionPoint []string
+	Data           map[string]interface{}
+}
+
+func mergeExecutionResults(results []ExecutionResult) map[string]interface{} {
+	if len(results) == 1 {
+		return results[0].Data
+	}
+	data := results[0].Data
+	for _, result := range results[1:] {
+		shallowCopyIntoMap(result.Data, data, result.InsertionPoint, 0)
+	}
+	return data
+}
+
+func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPoint []string, depth int) {
+	if len(insertionPoint) == 0 {
+		switch ptr := dst.(type) {
+		case map[string]interface{}:
+			for k, v := range src {
+				ptr[k] = v
+			}
+		default:
+			panic(errors.New("only map[string]interface allowed for top level merge"))
+		}
+	}
+}

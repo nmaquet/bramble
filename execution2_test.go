@@ -193,3 +193,75 @@ func TestBuildBatchedNonArrayBoundaryQueryDocuments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, docs)
 }
+
+func TestMergeExecutionResults(t *testing.T) {
+	t.Run("merges single map", func(t *testing.T) {
+		inputMap := jsonToInterfaceMap(`{
+			"gizmo": {
+				"id": "1",
+				"color": "Gizmo A"
+			}
+		}`)
+
+		result := ExecutionResult{
+			ServiceURL:     "http://service-a",
+			InsertionPoint: []string{},
+			Data:           inputMap,
+		}
+
+		mergedMap := mergeExecutionResults([]ExecutionResult{result})
+		require.Equal(t, inputMap, mergedMap)
+	})
+
+	t.Run("merges two top level results", func(t *testing.T) {
+		inputMapA := jsonToInterfaceMap(`{
+			"gizmoA": {
+				"id": "1",
+				"color": "Gizmo A"
+			}
+		}`)
+
+		resultA := ExecutionResult{
+			ServiceURL:     "http://service-a",
+			InsertionPoint: []string{},
+			Data:           inputMapA,
+		}
+
+		inputMapB := jsonToInterfaceMap(`{
+			"gizmoB": {
+				"id": "2",
+				"color": "Gizmo B"
+			}
+		}`)
+
+		resultB := ExecutionResult{
+			ServiceURL:     "http://service-b",
+			InsertionPoint: []string{},
+			Data:           inputMapB,
+		}
+
+		mergedMap := mergeExecutionResults([]ExecutionResult{resultA, resultB})
+
+		expected := jsonToInterfaceMap(`{
+			"gizmoA": {
+				"id": "1",
+				"color": "Gizmo A"
+			},
+			"gizmoB": {
+				"id": "2",
+				"color": "Gizmo B"
+			}
+		}`)
+		require.Equal(t, expected, mergedMap)
+	})
+}
+
+func jsonToInterfaceMap(jsonString string) map[string]interface{} {
+	var outputMap map[string]interface{}
+	err := json.Unmarshal([]byte(jsonString), &outputMap)
+	if err != nil {
+		panic(err)
+	}
+
+	return outputMap
+}
