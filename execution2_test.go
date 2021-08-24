@@ -93,3 +93,53 @@ func TestBuildBoundaryQueryDocuments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, docs)
 }
+
+func TestBuildNonArrayBoundaryQueryDocuments(t *testing.T) {
+	ddl := `
+		type Gizmo {
+			id: ID!
+			color: String!
+			owner: Owner
+		}
+
+		type Owner {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmos: [Gizmo!]!
+			getOwner(id: ID!): Owner!
+		}
+	`
+	schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+	boundaryField := BoundaryQuery{Query: "getOwner", Array: false}
+	ids := []string{"1", "2", "3"}
+	selectionSet := []ast.Selection{
+		&ast.Field{
+			Alias:            "_id",
+			Name:             "id",
+			Definition:       schema.Types["Owner"].Fields.ForName("id"),
+			ObjectDefinition: schema.Types["Owner"],
+		},
+		&ast.Field{
+			Alias:            "name",
+			Name:             "name",
+			Definition:       schema.Types["Owner"].Fields.ForName("name"),
+			ObjectDefinition: schema.Types["Owner"],
+		},
+	}
+	step := QueryPlanStep{
+		ServiceURL:     "http://example.com:8080",
+		ServiceName:    "test",
+		ParentType:     "Gizmo",
+		SelectionSet:   selectionSet,
+		InsertionPoint: []string{"gizmos", "owner"},
+		Then:           nil,
+	}
+	expected := []string{`{ _0: getOwner(id: "1") { _id: id name } _1: getOwner(id: "2") { _id: id name } _2: getOwner(id: "3") { _id: id name } }`}
+	ctx := testContextWithoutVariables(nil)
+	docs, err := buildBoundaryQueryDocuments(ctx, schema, step, ids, boundaryField)
+	require.NoError(t, err)
+	require.Equal(t, expected, docs)
+}

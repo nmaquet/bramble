@@ -61,8 +61,8 @@ func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, er
 }
 
 func buildBoundaryQueryDocuments(ctx context.Context, schema *ast.Schema, step QueryPlanStep, ids []string, parentTypeBoundaryField BoundaryQuery) ([]string, error) {
+	selectionSetQL := formatSelectionSetSingleLine(ctx, schema, step.SelectionSet)
 	if parentTypeBoundaryField.Array {
-		selectionSetQL := formatSelectionSetSingleLine(ctx, schema, step.SelectionSet)
 		qids := []string{}
 		for _, id := range ids {
 			qids = append(qids, fmt.Sprintf("%q", id))
@@ -70,5 +70,14 @@ func buildBoundaryQueryDocuments(ctx context.Context, schema *ast.Schema, step Q
 		idsQL := fmt.Sprintf("[%s]", strings.Join(qids, ", "))
 		return []string{fmt.Sprintf(`{ %s(ids: %s) %s }`, parentTypeBoundaryField.Query, idsQL, selectionSetQL)}, nil
 	}
-	panic("not implemented")
+
+	var selections []string
+	for i, id := range ids {
+		selection := fmt.Sprintf("%s: %s(id: %q) %s", nodeAlias(i), parentTypeBoundaryField.Query, id, selectionSetQL)
+		selections = append(selections, selection)
+	}
+
+	document := "{ " + strings.Join(selections, " ") + " }"
+
+	return []string{document}, nil
 }
