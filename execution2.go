@@ -60,7 +60,7 @@ func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, er
 	}
 }
 
-func buildBoundaryQueryDocuments(ctx context.Context, schema *ast.Schema, step QueryPlanStep, ids []string, parentTypeBoundaryField BoundaryQuery) ([]string, error) {
+func buildBoundaryQueryDocuments(ctx context.Context, schema *ast.Schema, step QueryPlanStep, ids []string, parentTypeBoundaryField BoundaryQuery, batchSize int) ([]string, error) {
 	selectionSetQL := formatSelectionSetSingleLine(ctx, schema, step.SelectionSet)
 	if parentTypeBoundaryField.Array {
 		qids := []string{}
@@ -71,13 +71,28 @@ func buildBoundaryQueryDocuments(ctx context.Context, schema *ast.Schema, step Q
 		return []string{fmt.Sprintf(`{ %s(ids: %s) %s }`, parentTypeBoundaryField.Query, idsQL, selectionSetQL)}, nil
 	}
 
-	var selections []string
-	for i, id := range ids {
-		selection := fmt.Sprintf("%s: %s(id: %q) %s", nodeAlias(i), parentTypeBoundaryField.Query, id, selectionSetQL)
-		selections = append(selections, selection)
+	var (
+		documents      []string
+		selectionIndex int
+	)
+	for _, batch := range batchBy(ids, batchSize) {
+		var selections []string
+		for _, id := range batch {
+			selection := fmt.Sprintf("%s: %s(id: %q) %s", nodeAlias(selectionIndex), parentTypeBoundaryField.Query, id, selectionSetQL)
+			selections = append(selections, selection)
+			selectionIndex++
+		}
+		document := "{ " + strings.Join(selections, " ") + " }"
+		documents = append(documents, document)
 	}
 
-	document := "{ " + strings.Join(selections, " ") + " }"
+	return documents, nil
+}
 
-	return []string{document}, nil
+func batchBy(items []string, batchSize int) (batches [][]string) {
+	for batchSize < len(items) {
+		items, batches = items[batchSize:], append(batches, items[0:batchSize:batchSize])
+	}
+
+	return append(batches, items)
 }
