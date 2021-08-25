@@ -209,7 +209,9 @@ func TestMergeExecutionResults(t *testing.T) {
 			Data:           inputMap,
 		}
 
-		mergedMap := mergeExecutionResults([]ExecutionResult{result})
+		mergedMap, err := mergeExecutionResults([]ExecutionResult{result})
+
+		require.NoError(t, err)
 		require.Equal(t, inputMap, mergedMap)
 	})
 
@@ -240,7 +242,7 @@ func TestMergeExecutionResults(t *testing.T) {
 			Data:           inputMapB,
 		}
 
-		mergedMap := mergeExecutionResults([]ExecutionResult{resultA, resultB})
+		mergedMap, err := mergeExecutionResults([]ExecutionResult{resultA, resultB})
 
 		expected := jsonToInterfaceMap(`{
 			"gizmoA": {
@@ -252,6 +254,8 @@ func TestMergeExecutionResults(t *testing.T) {
 				"color": "Gizmo B"
 			}
 		}`)
+
+		require.NoError(t, err)
 		require.Equal(t, expected, mergedMap)
 	})
 
@@ -273,8 +277,8 @@ func TestMergeExecutionResults(t *testing.T) {
 		}
 
 		inputMapB := jsonToInterfaceMap(`{
-			"owner": {
-				"_0": "1",
+			"_0": {
+				"_id": "1",
 				"name": "Owner A"
 			}
 		}`)
@@ -285,19 +289,20 @@ func TestMergeExecutionResults(t *testing.T) {
 			Data:           inputMapB,
 		}
 
-		mergedMap := mergeExecutionResults([]ExecutionResult{resultA, resultB})
+		mergedMap, err := mergeExecutionResults([]ExecutionResult{resultA, resultB})
 
 		expected := jsonToInterfaceMap(`{
 			"gizmo": {
 				"id": "1",
 				"color": "Gizmo A",
 				"owner": {
-					"_0": "1",
 					"_id": "1",
 					"name": "Owner A"
 				}
 			}
 		}`)
+
+		require.NoError(t, err)
 		require.Equal(t, expected, mergedMap)
 	})
 }

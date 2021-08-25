@@ -103,18 +103,23 @@ type ExecutionResult struct {
 	Data           map[string]interface{}
 }
 
-func mergeExecutionResults(results []ExecutionResult) map[string]interface{} {
+func mergeExecutionResults(results []ExecutionResult) (map[string]interface{}, error) {
+	if len(results) == 0 {
+		return nil, errors.New("mergeExecutionResults: nothing to merge")
+	}
 	if len(results) == 1 {
-		return results[0].Data
+		return results[0].Data, nil
 	}
 	data := results[0].Data
 	for _, result := range results[1:] {
-		shallowCopyIntoMap(result.Data, data, result.InsertionPoint, 0)
+		if err := shallowCopyIntoMap(result.Data, data, result.InsertionPoint, 0); err != nil {
+			return nil, err
+		}
 	}
-	return data
+	return data, nil
 }
 
-func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPoint []string, depth int) {
+func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPoint []string, depth int) error {
 	if len(insertionPoint) == 0 {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
@@ -122,7 +127,41 @@ func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPo
 				ptr[k] = v
 			}
 		default:
-			panic(errors.New("only map[string]interface allowed for top level merge"))
+			return fmt.Errorf("shallowCopyIntoMap: unxpected type '%T' for top-level merge", ptr)
+		}
+	} else if len(insertionPoint) == depth {
+		switch ptr := dst.(type) {
+		case map[string]interface{}:
+			if len(ptr) != 1 {
+				return fmt.Errorf("shallowCopyIntoMap: expected src to have one key, not %d", len(ptr))
+			}
+			data, ok := src["_0"].(map[string]interface{})
+			if !ok {
+				return errors.New("shallowCopyIntoMap: expected src[\"_0\"] to be map[string]interface{}")
+			}
+			for k, v := range data {
+				ptr[k] = v
+			}
+		case []interface{}:
+			return errors.New("shallowCopyIntoMap: not implemented")
+		default:
+			return fmt.Errorf("shallowCopyIntoMap: unxpected type '%T' for non top-level merge", ptr)
+		}
+	} else {
+		switch ptr := dst.(type) {
+		case map[string]interface{}:
+			if err := shallowCopyIntoMap(src, ptr[insertionPoint[depth]], insertionPoint, depth+1); err != nil {
+				return err
+			}
+		case []interface{}:
+			for _, innerPtr := range ptr {
+				if err := shallowCopyIntoMap(src, innerPtr, insertionPoint, depth); err != nil {
+					return err
+				}
+			}
+		default:
+			return fmt.Errorf("shallowCopyIntoMap: unxpected type '%T' for non top-level merge", ptr)
 		}
 	}
+	return nil
 }
