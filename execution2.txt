@@ -1,0 +1,213 @@
+type QueryPlan {
+    RootSteps []QueryPlanStep
+}
+
+type QueryPlanStep {
+    ServiceURL     string
+    ParentType     string
+    SelectionSet   ast.SelectionSet
+    InsertionPoint []string
+    Then           []QueryPlanStep
+}
+
+type ExecutionResult {
+    ServiceURL     string
+    InsertionPoint []string
+    Data         map[string]any
+}
+
+function Execute(queryPlan) :: []ExecutionResult {
+    stepWg := new WaitGroup
+    readWg := new WaitGroup
+    resultsChan := empty unbuffered channel of []ExecutionResult
+    results := empty slice of ExecutionResult
+    for step in queryPlan.RootSteps {
+        if step.ServiceURL is the bramble internal service {
+            r := ExecuteBrambleStep(step)
+            append r to results
+        }
+        stepWg.Add(1)
+        go ExecuteRootStep(step, resultsChan, stepWg)
+    }
+    readWg.Add(1)
+    go {
+        for rs in resultsChan {
+            append all elements of rs to results
+        }
+        readWg.Done()
+    }
+    stepWg.Wait()
+    close(resultsChan)
+    readWg.Wait()
+    return results
+}
+
+function MergeExecutionResults(results []ExecutionResult) :: map[string]any {
+    if len(results) == 1 {
+        return results[0].Data
+    }
+    data = results[0].Data
+    for _, result := range results[1:] {
+        shallowCopyIntoMap(result.Data, data, result.InsertionPoint, 0)
+    }
+    return data
+}
+
+function shallowCopyIntoMap(src map[string]any, dst any, insertionPoint []string, depth int) {
+    ptr := dst
+    if len(insertionPoint) == 0 {
+        if ptr is of type map[string]any {
+            for k, v := range src {
+                dst[k] = v
+            }
+        } else {
+          error out
+        }
+    }
+    if depth == len(insertionPoint) {
+        if ptr is of type map[string]any {
+            // TODO
+        }
+        else if ptr is of type []any {
+            // TODO
+        }
+        else {
+            error out
+        }
+    }
+    if ptr is of type map[string]any {
+        shallowCopyIntoMap(src, ptr[insertionPoint[depth]], insertionPoint, depth+1)
+    }
+    else if ptr is of type []any {
+        for innerPtr := range ptr {
+            shallowCopyIntoMap(src, innerPtr, insertionPoint, depth)
+        }
+    }
+    else {
+        error out
+    }
+}
+
+function ExecuteRootStep(queryPlanStep, resultsChan, waitGroup) :: void {
+    defer waitGroup.Done()
+    var document string
+    if step.ParentType is "Query" {
+        document = "query " + formatSelectionSet(queryPlanStep.SelectionSet)
+    } else if step.ParentType is "Mutation" {
+        document = "mutation " + formatSelectionSet(queryPlanStep.SelectionSet)
+    } else {
+        error out
+    }
+    data := executeDocument(document, queryPlanStep.ServiceURL)
+    write ExecutionResult{queryPlanStep.ServiceURL, queryPlanStep.InsertionPoint, data} to resultsChan
+    for childStep in step.Then {
+        boundaryIDs := extractBoundaryIDs(data, childStep.InsertionPoint)
+        waitGroup.Add(1)
+        go ExecuteChildStep(childStep, boundaryIDs, resultsChan, waitGroup)
+    }
+}
+
+function extractBoundaryIDs(data any, insertionPoint []string) :: []string {
+    ptr := data
+    if len(insertionPoint) == 0 {
+        if ptr is of type map[string]any {
+            return singleton slice containing ptr["_id"]
+        }
+        else if ptr is of type []any {
+            result := empty string slice
+            for innerPtr := range ptr {
+                ids := extractBoundaryIDs(innerPtr, insertionPoint)
+                append all from ids to result
+            }
+            return result
+        }
+        else {
+            error out
+        }
+    }
+    if ptr is of type map[string]any {
+        return extractBoundaryIDs(ptr[head(insertionPoint)], tail(insertionPoint))
+    }
+    else if ptr is of type []any {
+        result := empty string slice
+        for innerPtr := range ptr {
+            ids := extractBoundaryIDs(innerPtr, insertionPoint)
+            append all from ids to result
+        }
+        return result
+    }
+    else {
+        error out
+    }
+}
+
+function executeDocument(document, queryPlanStep.ServiceURL) :: map[string]any {
+    // "trivial"
+}
+
+function ExecuteChildStep(queryPlanStep, boundaryIDs, resultsChan, waitGroup) {
+    defer waitGroup.Done()
+    documents := buildBoundaryQueryDocuments(queryPlanStep, boundaryIDs)
+    data := new map[string]any
+    for document in documents {
+        partialData := executeDocument(document, queryPlan.ServiceURL)
+        for id, value := range partialData {
+            data[id] = value
+        }
+    }
+    write ExecutionResult{queryPlanStep.ServiceURL, queryPlanStep.InsertionPoint, data} to resultsChan
+    for childStep in step.Then {
+        boundaryIDs := extractBoundaryIDs(data, childStep.InsertionPoint)
+        waitGroup.Add(1)
+        go ExecuteChildStep(childStep, boundaryIDs, resultsChan, waitGroup)
+    }
+}
+
+function buildBoundaryQueryDocuments(queryPlanStep, boundaryIDs) :: []string {
+    if boundary field for type queryPlanStep.ParentType in service located at queryPlanStep.ServiceURL is of type Array {
+        return []string{`
+            {
+                ${boundaryField}(ids: [${boundaryIDs}]) {
+                    ${queryPlanStep.SelectionSet}
+                }
+            }
+        `}
+    }
+    queries := []string{}
+    in batches of 50 from boundaryIDs {
+        query := `{`
+        for id in batch {
+            query = query + `
+                _${id}: ${boundaryField}(id: ${id}) {
+                    ${queryPlanStep.SelectionSet}
+                }
+            `
+        }
+        query = query + "}"
+        append query to queries
+    }
+    return queries
+}
+
+function ExecuteBrambleStep(queryPlanStep) :: ExecutionResult {
+    result := BuildTypenameResponseMap(queryPlanStep.SelectionSet, queryPlanStep.ParentType)
+    return ExecutionResult {
+        ServiceURL: the bramble internal service
+        Result: result
+    }
+}
+
+functon BuildTypenameResponseMap(selectionSet, parentTypeName) :: map[string]any {
+    result := empty map
+    for each field f in selectionSet {
+        if f has a selection set {
+            error out if f.Definition.Type is not a NamedType
+            error out if f.Definition.DirectiveList does not have the `@namespace` directive
+            result[f.Alias] = BuildTypenameResponseMap(f.selectionSet, f.Definition.Type.Name)
+        } else {
+            error out f.Name is not "__typename"
+            result[f.Alias] = parentTypeName
+        }
+    }
+    return result
+}
