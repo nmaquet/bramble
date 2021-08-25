@@ -259,7 +259,7 @@ func TestMergeExecutionResults(t *testing.T) {
 		require.Equal(t, expected, mergedMap)
 	})
 
-	t.Run("merges root step with child step", func(t *testing.T) {
+	t.Run("merges root step with child step (root step returns object)", func(t *testing.T) {
 		inputMapA := jsonToInterfaceMap(`{
 			"gizmo": {
 				"id": "1",
@@ -300,6 +300,95 @@ func TestMergeExecutionResults(t *testing.T) {
 					"name": "Owner A"
 				}
 			}
+		}`)
+
+		require.NoError(t, err)
+		require.Equal(t, expected, mergedMap)
+	})
+
+	t.Run("merges root step with child step (root step returns array)", func(t *testing.T) {
+		inputMapA := jsonToInterfaceMap(`{
+			"gizmos": [
+				{
+					"id": "1",
+					"color": "RED",
+					"owner": {
+						"_id": "4"
+					}
+				},
+				{
+					"id": "2",
+					"color": "GREEN",
+					"owner": {
+						"_id": "5"
+					}
+				},
+				{
+					"id": "3",
+					"color": "BLUE",
+					"owner": {
+						"_id": "6"
+					}
+				}
+			]
+		}`)
+
+		resultA := ExecutionResult{
+			ServiceURL:     "http://service-a",
+			InsertionPoint: []string{},
+			Data:           inputMapA,
+		}
+
+		inputMapB := jsonToInterfaceMap(`{
+			"_0": {
+				"_id": "4",
+				"name": "Owner A"
+			},
+			"_1": {
+				"_id": "5",
+				"name": "Owner B"
+			},
+			"_2": {
+				"_id": "6",
+				"name": "Owner C"
+			}
+		}`)
+
+		resultB := ExecutionResult{
+			ServiceURL:     "http://service-b",
+			InsertionPoint: []string{"gizmos", "owner"},
+			Data:           inputMapB,
+		}
+
+		mergedMap, err := mergeExecutionResults([]ExecutionResult{resultA, resultB})
+
+		expected := jsonToInterfaceMap(`{
+			"gizmos": [
+				{
+					"id": "1",
+					"color": "RED",
+					"owner": {
+						"_id": "4",
+						"name": "Owner A"
+					}
+				},
+				{
+					"id": "2",
+					"color": "GREEN",
+					"owner": {
+						"_id": "5",
+						"name": "Owner B"
+					}
+				},
+				{
+					"id": "3",
+					"color": "BLUE",
+					"owner": {
+						"_id": "6",
+						"name": "Owner C"
+					}
+				}
+			]
 		}`)
 
 		require.NoError(t, err)

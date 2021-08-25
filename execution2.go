@@ -129,9 +129,10 @@ func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPo
 		default:
 			return fmt.Errorf("shallowCopyIntoMap: unxpected type '%T' for top-level merge", ptr)
 		}
-	} else if len(insertionPoint) == depth {
+	} else if len(insertionPoint) == depth+1 {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
+			ptr = ptr[insertionPoint[len(insertionPoint)-1]].(map[string]interface{})
 			if len(ptr) != 1 {
 				return fmt.Errorf("shallowCopyIntoMap: expected src to have one key, not %d", len(ptr))
 			}
@@ -143,7 +144,19 @@ func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPo
 				ptr[k] = v
 			}
 		case []interface{}:
-			return errors.New("shallowCopyIntoMap: not implemented")
+			for _, dstValue := range ptr {
+				// FIXME, remove these heinous casts
+				dstID := dstValue.(map[string]interface{})[insertionPoint[len(insertionPoint)-1]].(map[string]interface{})["_id"]
+				for _, srcValue := range src {
+					srcID := srcValue.(map[string]interface{})["_id"]
+					if srcID == dstID {
+						for k, v := range srcValue.(map[string]interface{}) {
+							// FIXME, remove these heinous casts
+							dstValue.(map[string]interface{})[insertionPoint[len(insertionPoint)-1]].(map[string]interface{})[k] = v
+						}
+					}
+				}
+			}
 		default:
 			return fmt.Errorf("shallowCopyIntoMap: unxpected type '%T' for non top-level merge", ptr)
 		}
