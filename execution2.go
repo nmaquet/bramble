@@ -112,14 +112,14 @@ func mergeExecutionResults(results []ExecutionResult) (map[string]interface{}, e
 	}
 	data := results[0].Data
 	for _, result := range results[1:] {
-		if err := shallowCopyIntoMap(result.Data, data, result.InsertionPoint, 0); err != nil {
+		if err := shallowCopyIntoMap(result.Data, data, result.InsertionPoint); err != nil {
 			return nil, err
 		}
 	}
 	return data, nil
 }
 
-func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPoint []string, depth int) error {
+func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPoint []string) error {
 	if len(insertionPoint) == 0 {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
@@ -129,10 +129,10 @@ func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPo
 		default:
 			return fmt.Errorf("shallowCopyIntoMap: unxpected type '%T' for top-level merge", ptr)
 		}
-	} else if len(insertionPoint) == depth+1 {
+	} else if len(insertionPoint) == 1 {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
-			ptr = ptr[insertionPoint[len(insertionPoint)-1]].(map[string]interface{})
+			ptr = ptr[insertionPoint[0]].(map[string]interface{})
 			if len(ptr) != 1 {
 				return fmt.Errorf("shallowCopyIntoMap: expected src to have one key, not %d", len(ptr))
 			}
@@ -146,13 +146,13 @@ func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPo
 		case []interface{}:
 			for _, dstValue := range ptr {
 				// FIXME, remove these heinous casts
-				dstID := dstValue.(map[string]interface{})[insertionPoint[len(insertionPoint)-1]].(map[string]interface{})["_id"]
+				dstID := dstValue.(map[string]interface{})[insertionPoint[0]].(map[string]interface{})["_id"]
 				for _, srcValue := range src {
 					srcID := srcValue.(map[string]interface{})["_id"]
 					if srcID == dstID {
 						for k, v := range srcValue.(map[string]interface{}) {
 							// FIXME, remove these heinous casts
-							dstValue.(map[string]interface{})[insertionPoint[len(insertionPoint)-1]].(map[string]interface{})[k] = v
+							dstValue.(map[string]interface{})[insertionPoint[0]].(map[string]interface{})[k] = v
 						}
 					}
 				}
@@ -163,12 +163,12 @@ func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPo
 	} else {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
-			if err := shallowCopyIntoMap(src, ptr[insertionPoint[depth]], insertionPoint, depth+1); err != nil {
+			if err := shallowCopyIntoMap(src, ptr[insertionPoint[0]], insertionPoint[1:]); err != nil {
 				return err
 			}
 		case []interface{}:
 			for _, innerPtr := range ptr {
-				if err := shallowCopyIntoMap(src, innerPtr, insertionPoint, depth); err != nil {
+				if err := shallowCopyIntoMap(src, innerPtr, insertionPoint); err != nil {
 					return err
 				}
 			}
