@@ -259,7 +259,7 @@ func TestMergeExecutionResults(t *testing.T) {
 		require.Equal(t, expected, mergedMap)
 	})
 
-	t.Run("merges root step with child step (root step returns object)", func(t *testing.T) {
+	t.Run("merges root step with child step (root step returns object, boundary field is non array)", func(t *testing.T) {
 		inputMapA := jsonToInterfaceMap(`{
 			"gizmo": {
 				"id": "1",
@@ -306,7 +306,7 @@ func TestMergeExecutionResults(t *testing.T) {
 		require.Equal(t, expected, mergedMap)
 	})
 
-	t.Run("merges root step with child step (root step returns array)", func(t *testing.T) {
+	t.Run("merges root step with child step (root step returns array, boundary field is non array)", func(t *testing.T) {
 		inputMapA := jsonToInterfaceMap(`{
 			"gizmos": [
 				{
