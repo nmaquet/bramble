@@ -112,14 +112,14 @@ func mergeExecutionResults(results []ExecutionResult) (map[string]interface{}, e
 	}
 	data := results[0].Data
 	for _, result := range results[1:] {
-		if err := shallowCopyIntoMap(result.Data, data, result.InsertionPoint); err != nil {
+		if err := mergeExecutionResultsRec(result.Data, data, result.InsertionPoint); err != nil {
 			return nil, err
 		}
 	}
 	return data, nil
 }
 
-func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPoint []string) error {
+func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, insertionPoint []string) error {
 	if len(insertionPoint) == 0 {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
@@ -163,12 +163,12 @@ func shallowCopyIntoMap(src map[string]interface{}, dst interface{}, insertionPo
 	} else {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
-			if err := shallowCopyIntoMap(src, ptr[insertionPoint[0]], insertionPoint[1:]); err != nil {
+			if err := mergeExecutionResultsRec(src, ptr[insertionPoint[0]], insertionPoint[1:]); err != nil {
 				return err
 			}
 		case []interface{}:
 			for _, innerPtr := range ptr {
-				if err := shallowCopyIntoMap(src, innerPtr, insertionPoint); err != nil {
+				if err := mergeExecutionResultsRec(src, innerPtr, insertionPoint); err != nil {
 					return err
 				}
 			}
