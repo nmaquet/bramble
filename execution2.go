@@ -135,7 +135,6 @@ func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, inser
 	// base case for child steps (insertion point is never empty for child steps)
 	if len(insertionPoint) == 1 {
 		switch ptr := dst.(type) {
-		// boundary field is not an Array type
 		case map[string]interface{}:
 			ptr, err := mapAtJSONPath(ptr, insertionPoint[0])
 			if err != nil {
@@ -148,14 +147,17 @@ func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, inser
 			for k, v := range data {
 				ptr[k] = v
 			}
-		// boundary field is an Array type
 		case []interface{}:
 			for _, dstValue := range ptr {
 				dstID, err := valueAtJSONPath(dstValue, insertionPoint[0], "_id")
 				if err != nil {
 					return err
 				}
-				for _, srcValue := range src {
+				srcValues, err := getBoundaryFieldResults(src)
+				if err != nil {
+					return err
+				}
+				for _, srcValue := range srcValues {
 					srcID, err := valueAtJSONPath(srcValue, "_id")
 					if err != nil {
 						return err
@@ -205,7 +207,7 @@ func mapAtJSONPath(value interface{}, path ...string) (map[string]interface{}, e
 	}
 	resultMap, ok := result.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("getMapOfStrToInterfaceAtPath: expected value to a 'map[string]interface{}' but got '%T'", result)
+		return nil, fmt.Errorf("mapAtJSONPath: expected value to be a 'map[string]interface{}' but got '%T'", result)
 	}
 	return resultMap, nil
 }
@@ -214,13 +216,45 @@ func valueAtJSONPath(val interface{}, path ...string) (interface{}, error) {
 	for len(path) > 0 {
 		valMap, ok := val.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("getValueAtPath: expected value to a 'map[string]interface{}' but got '%T'", val)
+			return nil, fmt.Errorf("valueAtJSONPath: expected value to be a 'map[string]interface{}' but got '%T'", val)
 		}
 		val, ok = valMap[path[0]]
 		if !ok {
-			return nil, errors.New("getValueAtPath: invalid path")
+			return nil, errors.New("valueAtJSONPath: invalid path")
 		}
 		path = path[1:]
 	}
 	return val, nil
+}
+
+func getBoundaryFieldResults(src map[string]interface{}) ([]map[string]interface{}, error) {
+	arrayBoundaryFieldResults, ok := src["_result"]
+	if ok {
+		slice, ok := arrayBoundaryFieldResults.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("getBoundaryFieldResults: expected value to be a '[]map[string]interface{}' but got '%T'", arrayBoundaryFieldResults)
+		}
+		var result []map[string]interface{}
+		for i, element := range slice {
+			elementMap, ok := element.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("getBoundaryFieldResults: expect value at index %d to be map[string]interface{}' but got '%T'", i, element)
+			}
+			result = append(result, elementMap)
+		}
+		return result, nil
+	}
+	var result []map[string]interface{}
+	for i := 0; i < len(src); i++ {
+		element, ok := src[nodeAlias(i)]
+		if !ok {
+			return nil, fmt.Errorf("getBoundaryFieldResults: unexpected missing key '%s'", nodeAlias(i))
+		}
+		elementMap, ok := element.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("getBoundaryFieldResults: expect value at '%s' to be map[string]interface{}' but got '%T'", nodeAlias(i), element)
+		}
+		result = append(result, elementMap)
+	}
+	return result, nil
 }

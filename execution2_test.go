@@ -394,6 +394,97 @@ func TestMergeExecutionResults(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expected, mergedMap)
 	})
+
+	t.Run("merges root step with child step (root step returns array, boundary field is array)", func(t *testing.T) {
+		inputMapA := jsonToInterfaceMap(`{
+			"gizmos": [
+				{
+					"id": "1",
+					"color": "RED",
+					"owner": {
+						"_id": "4"
+					}
+				},
+				{
+					"id": "2",
+					"color": "GREEN",
+					"owner": {
+						"_id": "5"
+					}
+				},
+				{
+					"id": "3",
+					"color": "BLUE",
+					"owner": {
+						"_id": "6"
+					}
+				}
+			]
+		}`)
+
+		resultA := ExecutionResult{
+			ServiceURL:     "http://service-a",
+			InsertionPoint: []string{},
+			Data:           inputMapA,
+		}
+
+		inputMapB := jsonToInterfaceMap(`{
+			"_result": [
+				{
+					"_id": "4",
+					"name": "Owner A"
+				},
+				{
+					"_id": "5",
+					"name": "Owner B"
+				},
+				{
+					"_id": "6",
+					"name": "Owner C"
+				}
+			]
+		}`)
+
+		resultB := ExecutionResult{
+			ServiceURL:     "http://service-b",
+			InsertionPoint: []string{"gizmos", "owner"},
+			Data:           inputMapB,
+		}
+
+		mergedMap, err := mergeExecutionResults([]ExecutionResult{resultA, resultB})
+
+		expected := jsonToInterfaceMap(`{
+			"gizmos": [
+				{
+					"id": "1",
+					"color": "RED",
+					"owner": {
+						"_id": "4",
+						"name": "Owner A"
+					}
+				},
+				{
+					"id": "2",
+					"color": "GREEN",
+					"owner": {
+						"_id": "5",
+						"name": "Owner B"
+					}
+				},
+				{
+					"id": "3",
+					"color": "BLUE",
+					"owner": {
+						"_id": "6",
+						"name": "Owner C"
+					}
+				}
+			]
+		}`)
+
+		require.NoError(t, err)
+		require.Equal(t, expected, mergedMap)
+	})
 }
 
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {
