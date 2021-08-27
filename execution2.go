@@ -120,6 +120,7 @@ func mergeExecutionResults(results []ExecutionResult) (map[string]interface{}, e
 }
 
 func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, insertionPoint []string) error {
+	// base case for root steps (insertion point is always empty for root steps)
 	if len(insertionPoint) == 0 {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
@@ -127,54 +128,99 @@ func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, inser
 				ptr[k] = v
 			}
 		default:
-			return fmt.Errorf("shallowCopyIntoMap: unxpected type '%T' for top-level merge", ptr)
+			return fmt.Errorf("mergeExecutionResultsRec: unxpected type '%T' for top-level merge", ptr)
 		}
-	} else if len(insertionPoint) == 1 {
+		return nil
+	}
+	// base case for child steps (insertion point is never empty for child steps)
+	if len(insertionPoint) == 1 {
 		switch ptr := dst.(type) {
+		// boundary field is not an Array type
 		case map[string]interface{}:
-			ptr = ptr[insertionPoint[0]].(map[string]interface{})
-			if len(ptr) != 1 {
-				return fmt.Errorf("shallowCopyIntoMap: expected src to have one key, not %d", len(ptr))
+			ptr, err := mapAtJSONPath(ptr, insertionPoint[0])
+			if err != nil {
+				return err
 			}
-			data, ok := src["_0"].(map[string]interface{})
-			if !ok {
-				return errors.New("shallowCopyIntoMap: expected src[\"_0\"] to be map[string]interface{}")
+			data, err := mapAtJSONPath(src, nodeAlias(0))
+			if err != nil {
+				return err
 			}
 			for k, v := range data {
 				ptr[k] = v
 			}
+		// boundary field is an Array type
 		case []interface{}:
 			for _, dstValue := range ptr {
-				// FIXME, remove these heinous casts
-				dstID := dstValue.(map[string]interface{})[insertionPoint[0]].(map[string]interface{})["_id"]
+				dstID, err := valueAtJSONPath(dstValue, insertionPoint[0], "_id")
+				if err != nil {
+					return err
+				}
 				for _, srcValue := range src {
-					srcID := srcValue.(map[string]interface{})["_id"]
+					srcID, err := valueAtJSONPath(srcValue, "_id")
+					if err != nil {
+						return err
+					}
 					if srcID == dstID {
-						for k, v := range srcValue.(map[string]interface{}) {
-							// FIXME, remove these heinous casts
-							dstValue.(map[string]interface{})[insertionPoint[0]].(map[string]interface{})[k] = v
+						srcMap, err := mapAtJSONPath(srcValue)
+						if err != nil {
+							return err
+						}
+						for k, v := range srcMap {
+							dstMap, err := mapAtJSONPath(dstValue, insertionPoint[0])
+							if err != nil {
+								return err
+							}
+							dstMap[k] = v
 						}
 					}
 				}
 			}
 		default:
-			return fmt.Errorf("shallowCopyIntoMap: unxpected type '%T' for non top-level merge", ptr)
+			return fmt.Errorf("mergeExecutionResultsRec: unxpected type '%T' for non top-level merge", ptr)
 		}
-	} else {
-		switch ptr := dst.(type) {
-		case map[string]interface{}:
-			if err := mergeExecutionResultsRec(src, ptr[insertionPoint[0]], insertionPoint[1:]); err != nil {
+		return nil
+	}
+	// recursive case
+	switch ptr := dst.(type) {
+	case map[string]interface{}:
+		if err := mergeExecutionResultsRec(src, ptr[insertionPoint[0]], insertionPoint[1:]); err != nil {
+			return err
+		}
+	case []interface{}:
+		for _, innerPtr := range ptr {
+			if err := mergeExecutionResultsRec(src, innerPtr, insertionPoint); err != nil {
 				return err
 			}
-		case []interface{}:
-			for _, innerPtr := range ptr {
-				if err := mergeExecutionResultsRec(src, innerPtr, insertionPoint); err != nil {
-					return err
-				}
-			}
-		default:
-			return fmt.Errorf("shallowCopyIntoMap: unxpected type '%T' for non top-level merge", ptr)
 		}
+	default:
+		return fmt.Errorf("mergeExecutionResultsRec: unxpected type '%T' for non top-level merge", ptr)
 	}
 	return nil
+}
+
+func mapAtJSONPath(value interface{}, path ...string) (map[string]interface{}, error) {
+	result, err := valueAtJSONPath(value, path...)
+	if err != nil {
+		return nil, err
+	}
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("getMapOfStrToInterfaceAtPath: expected value to a 'map[string]interface{}' but got '%T'", result)
+	}
+	return resultMap, nil
+}
+
+func valueAtJSONPath(val interface{}, path ...string) (interface{}, error) {
+	for len(path) > 0 {
+		valMap, ok := val.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("getValueAtPath: expected value to a 'map[string]interface{}' but got '%T'", val)
+		}
+		val, ok = valMap[path[0]]
+		if !ok {
+			return nil, errors.New("getValueAtPath: invalid path")
+		}
+		path = path[1:]
+	}
+	return val, nil
 }
