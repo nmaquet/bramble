@@ -87,7 +87,7 @@ func TestBuildBoundaryQueryDocuments(t *testing.T) {
 		InsertionPoint: []string{"gizmos", "owner"},
 		Then:           nil,
 	}
-	expected := []string{`{ getOwners(ids: ["1", "2", "3"]) { _id: id name } }`}
+	expected := []string{`{ _result: getOwners(ids: ["1", "2", "3"]) { _id: id name } }`}
 	ctx := testContextWithoutVariables(nil)
 	docs, err := buildBoundaryQueryDocuments(ctx, schema, step, ids, boundaryField, 1)
 	require.NoError(t, err)

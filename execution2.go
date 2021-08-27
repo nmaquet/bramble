@@ -68,7 +68,7 @@ func buildBoundaryQueryDocuments(ctx context.Context, schema *ast.Schema, step Q
 			qids = append(qids, fmt.Sprintf("%q", id))
 		}
 		idsQL := fmt.Sprintf("[%s]", strings.Join(qids, ", "))
-		return []string{fmt.Sprintf(`{ %s(ids: %s) %s }`, parentTypeBoundaryField.Query, idsQL, selectionSetQL)}, nil
+		return []string{fmt.Sprintf(`{ _result: %s(ids: %s) %s }`, parentTypeBoundaryField.Query, idsQL, selectionSetQL)}, nil
 	}
 
 	var (
