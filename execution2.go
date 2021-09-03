@@ -261,9 +261,29 @@ func getBoundaryFieldResults(src map[string]interface{}) ([]map[string]interface
 
 var ErrNullBubbledToRoot = errors.New("bubbleUpNullValuesInPlace: null bubbled up to root")
 
-// bubbleUpNullValuesInPlace checks for expected null values (as per errs) and bubbles them up if needed, and checks for
-// unexpected null values and returns additional new errors for each (these unexpected nulls are also bubbled up).
+// bubbleUpNullValuesInPlace checks for expected null values (as per schema) and bubbles them up if needed, and checks for
+// unexpected null values and returns errors for each (these unexpected nulls are also bubbled up).
 // See https://spec.graphql.org/June2018/#sec-Errors-and-Non-Nullability
-func bubbleUpNullValuesInPlace(schema *ast.Schema, result map[string]interface{}, errs GraphqlErrors) (GraphqlErrors, error) {
-	return nil, nil
+func bubbleUpNullValuesInPlace(schema *ast.Schema, selectionSet ast.SelectionSet, result map[string]interface{}) (GraphqlErrors, error) {
+	return bubbleUpNullValuesInPlaceRec(schema, nil, selectionSet, result)
+}
+
+func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, selectionSet ast.SelectionSet, result interface{}) (GraphqlErrors, error) {
+	switch result := result.(type) {
+	case map[string]interface{}:
+		for _, selection := range selectionSet {
+			field := selection.(*ast.Field)
+			value := result[field.Alias]
+			if field.SelectionSet != nil {
+				errs, err := bubbleUpNullValuesInPlaceRec(schema, field.Definition.Type, field.SelectionSet, value)
+				if err != nil {
+					return errs, nil
+				}
+			} else {
+				if value == nil && field.Definition.Type.NonNull {
+					return []GraphqlError{{Message: "WTF", Path: nil, Extensions: nil}}, nil
+				}
+			}
+		}
+	}
 }

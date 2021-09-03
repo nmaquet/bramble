@@ -519,11 +519,29 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 				},
 			},
 		}
-		var errs GraphqlErrors
+
 		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
-		newErrs, err := bubbleUpNullValuesInPlace(schema, result, errs)
+
+		selectionSet := []ast.Selection{
+			&ast.Field{
+				Alias:            "gizmos",
+				Name:             "gizmos",
+				Definition:       schema.Types["Query"].Fields.ForName("gizmos"),
+				ObjectDefinition: schema.Types["Owner"],
+				SelectionSet: []ast.Selection{
+					&ast.Field{
+						Alias:            "id",
+						Name:             "id",
+						Definition:       schema.Types["Gizmo"].Fields.ForName("id"),
+						ObjectDefinition: schema.Types["Gizmo"],
+					},
+				},
+			},
+		}
+
+		errs, err := bubbleUpNullValuesInPlace(schema, selectionSet, result)
 		require.NoError(t, err)
-		require.Nil(t, newErrs)
+		require.Nil(t, errs)
 	})
 
 	t.Run("1 expected null", func(t *testing.T) {
@@ -560,11 +578,27 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 				},
 			},
 		}
-		errs := []GraphqlError{
-			{Message: "nope", Path: makePath("gizmos", 2, "color")},
-		}
+
 		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
-		errs, err := bubbleUpNullValuesInPlace(schema, result, errs)
+
+		selectionSet := []ast.Selection{
+			&ast.Field{
+				Alias:            "gizmos",
+				Name:             "gizmos",
+				Definition:       schema.Types["Query"].Fields.ForName("gizmos"),
+				ObjectDefinition: schema.Types["Owner"],
+				SelectionSet: []ast.Selection{
+					&ast.Field{
+						Alias:            "id",
+						Name:             "id",
+						Definition:       schema.Types["Gizmo"].Fields.ForName("id"),
+						ObjectDefinition: schema.Types["Gizmo"],
+					},
+				},
+			},
+		}
+
+		errs, err := bubbleUpNullValuesInPlace(schema, selectionSet, result)
 		require.Equal(t, ErrNullBubbledToRoot, err)
 		require.Nil(t, errs)
 	})
@@ -579,19 +613,4 @@ func jsonToInterfaceMap(jsonString string) map[string]interface{} {
 	}
 
 	return outputMap
-}
-
-func makePath(elements ...interface{}) ast.Path {
-	result := ast.Path{}
-	for _, element := range elements {
-		switch element := element.(type) {
-		case string:
-			result = append(result, ast.PathName(element))
-		case int:
-			result = append(result, ast.PathIndex(element))
-		default:
-			panic("makePath: invalid element")
-		}
-	}
-	return result
 }
