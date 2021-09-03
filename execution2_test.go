@@ -519,11 +519,56 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 				},
 			},
 		}
+		var errs GraphqlErrors
 		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
-		errs, err := bubbleUpNullValuesInPlace(schema, result, nil)
+		newErrs, err := bubbleUpNullValuesInPlace(schema, result, errs)
 		require.NoError(t, err)
+		require.Nil(t, newErrs)
+	})
+
+	t.Run("1 expected null", func(t *testing.T) {
+		ddl := `
+		type Gizmo {
+			id: ID!
+			color: String!
+			owner: Owner
+		}
+
+		type Owner {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmos: [Gizmo!]!
+			getOwners(ids: [ID!]!): [Owner!]!
+		}`
+
+		result := map[string]interface{}{
+			"gizmos": []map[string]interface{}{
+				{
+					"id":    "GIZMO1",
+					"color": "RED",
+				},
+				{
+					"id":    "GIZMO2",
+					"color": "GREEN",
+				},
+				{
+					"id":    "GIZMO3",
+					"color": nil,
+				},
+			},
+		}
+		errs := []GraphqlError{
+			{Message: "nope", Path: makePath("gizmos", 2, "color")},
+		}
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+		errs, err := bubbleUpNullValuesInPlace(schema, result, errs)
+		require.Equal(t, ErrNullBubbledToRoot, err)
 		require.Nil(t, errs)
 	})
+
 }
 
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {
@@ -534,4 +579,19 @@ func jsonToInterfaceMap(jsonString string) map[string]interface{} {
 	}
 
 	return outputMap
+}
+
+func makePath(elements ...interface{}) ast.Path {
+	result := ast.Path{}
+	for _, element := range elements {
+		switch element := element.(type) {
+		case string:
+			result = append(result, ast.PathName(element))
+		case int:
+			result = append(result, ast.PathIndex(element))
+		default:
+			panic("makePath: invalid element")
+		}
+	}
+	return result
 }
