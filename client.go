@@ -13,6 +13,7 @@ import (
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // GraphQLClient is a GraphQL client.
@@ -157,6 +158,7 @@ type GraphqlErrors []GraphqlError
 // GraphqlError is a single GraphQL error
 type GraphqlError struct {
 	Message    string                 `json:"message"`
+	Path       ast.Path               `json:"path,omitempty"`
 	Extensions map[string]interface{} `json:"extensions"`
 }
 
