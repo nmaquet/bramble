@@ -258,3 +258,10 @@ func getBoundaryFieldResults(src map[string]interface{}) ([]map[string]interface
 	}
 	return result, nil
 }
+
+// bubbleUpNullValuesInPlace checks for expected null values (as per errs) and bubbles them up if needed, and checks for
+// unexpected null values and returns additional new errors for each (these unexpected nulls are also bubbled up).
+// See https://spec.graphql.org/June2018/#sec-Errors-and-Non-Nullability
+func bubbleUpNullValuesInPlace(schema *ast.Schema, result map[string]interface{}, errs GraphqlErrors) (GraphqlErrors, error) {
+	return nil, nil
+}

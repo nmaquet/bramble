@@ -487,6 +487,45 @@ func TestMergeExecutionResults(t *testing.T) {
 	})
 }
 
+func TestBubbleUpNullValuesInPlace(t *testing.T) {
+	t.Run("no expected or unexpected nulls", func(t *testing.T) {
+		ddl := `
+		type Gizmo {
+			id: ID!
+			color: String!
+			owner: Owner
+		}
+
+		type Owner {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmos: [Gizmo!]!
+			getOwners(ids: [ID!]!): [Owner!]!
+		}`
+
+		result := map[string]interface{}{
+			"gizmos": []map[string]interface{}{
+				{
+					"id": "GIZMO1",
+				},
+				{
+					"id": "GIZMO2",
+				},
+				{
+					"id": "GIZMO3",
+				},
+			},
+		}
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+		errs, err := bubbleUpNullValuesInPlace(schema, result, nil)
+		require.NoError(t, err)
+		require.Nil(t, errs)
+	})
+}
+
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {
 	var outputMap map[string]interface{}
 	err := json.Unmarshal([]byte(jsonString), &outputMap)
