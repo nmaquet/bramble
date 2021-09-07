@@ -653,7 +653,7 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 
 		errs, err := bubbleUpNullValuesInPlace(schema, selectionSet, result)
 		require.NoError(t, err)
-		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: nil, Extensions: nil}}), errs)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
 		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": null }`), result)
 	})
 
@@ -679,8 +679,8 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 			{
 				"gizmos": [
 					{ "id": "GIZMO1", "color": "RED" },
-					{ "id": "GIZMO2", "color": "GREEN" },
-					{ "id": "GIZMO3", "color": null }
+					{ "id": "GIZMO3", "color": null },
+					{ "id": "GIZMO2", "color": "GREEN" }
 				]
 			}
 		`)
@@ -712,8 +712,8 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 
 		errs, err := bubbleUpNullValuesInPlace(schema, selectionSet, result)
 		require.NoError(t, err)
-		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: nil, Extensions: nil}}), errs)
-		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": [ { "id": "GIZMO1", "color": "RED" }, { "id": "GIZMO2", "color": "GREEN" }, null ]	}`), result)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(1), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": [ { "id": "GIZMO1", "color": "RED" }, null, { "id": "GIZMO2", "color": "GREEN" } ]	}`), result)
 	})
 
 	t.Run("0 expected nulls", func(t *testing.T) {

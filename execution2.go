@@ -265,7 +265,7 @@ var ErrNullBubbledToRoot = errors.New("bubbleUpNullValuesInPlace: null bubbled u
 // unexpected null values and returns errors for each (these unexpected nulls are also bubbled up).
 // See https://spec.graphql.org/June2018/#sec-Errors-and-Non-Nullability
 func bubbleUpNullValuesInPlace(schema *ast.Schema, selectionSet ast.SelectionSet, result map[string]interface{}) (GraphqlErrors, error) {
-	errs, bubbleUp, err := bubbleUpNullValuesInPlaceRec(schema, nil, selectionSet, result)
+	errs, bubbleUp, err := bubbleUpNullValuesInPlaceRec(schema, nil, selectionSet, result, ast.Path{})
 	if err != nil {
 		return nil, err
 	}
@@ -275,14 +275,14 @@ func bubbleUpNullValuesInPlace(schema *ast.Schema, selectionSet ast.SelectionSet
 	return errs, nil
 }
 
-func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, selectionSet ast.SelectionSet, result interface{}) (errs GraphqlErrors, bubbleUp bool, err error) {
+func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, selectionSet ast.SelectionSet, result interface{}, path ast.Path) (errs GraphqlErrors, bubbleUp bool, err error) {
 	switch result := result.(type) {
 	case map[string]interface{}:
 		for _, selection := range selectionSet {
 			field := selection.(*ast.Field) // FIXME
 			value := result[field.Alias]
 			if field.SelectionSet != nil {
-				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, field.Definition.Type, field.SelectionSet, value)
+				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, field.Definition.Type, field.SelectionSet, value, append(path, ast.PathName(field.Alias)))
 				if lowerErr != nil {
 					return nil, false, lowerErr
 				}
@@ -296,14 +296,14 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 				errs = append(errs, lowerErrs...)
 			} else {
 				if value == nil && field.Definition.Type.NonNull {
-					errs = append(errs, GraphqlError{Message: "TODO", Path: nil, Extensions: nil})
+					errs = append(errs, GraphqlError{Message: "TODO", Path: append(path, ast.PathName(field.Alias)), Extensions: nil})
 					bubbleUp = true
 				}
 			}
 		}
 	case []interface{}:
 		for i, value := range result {
-			lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, selectionSet, value)
+			lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, selectionSet, value, append(path, ast.PathIndex(i)))
 			if lowerErr != nil {
 				return nil, false, err
 			}
