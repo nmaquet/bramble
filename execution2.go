@@ -307,14 +307,17 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 	case []interface{}:
 		var graphqlErrs GraphqlErrors
 		var parentNulled bool
-		for _, value := range result {
+		for i, value := range result {
 			errs, nulled, err := bubbleUpNullValuesInPlaceRec(schema, currentType, selectionSet, value)
 			if err != nil {
 				return nil, false, err
 			}
 			if nulled {
-				// FIXME check nullability of ArrayType
-				parentNulled = true
+				if currentType.Elem.NonNull {
+					parentNulled = true
+				} else {
+					result[i] = nil
+				}
 			}
 			graphqlErrs = append(graphqlErrs, errs...)
 		}
