@@ -278,6 +278,8 @@ func bubbleUpNullValuesInPlace(schema *ast.Schema, selectionSet ast.SelectionSet
 func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, selectionSet ast.SelectionSet, result interface{}) (GraphqlErrors, bool, error) {
 	switch result := result.(type) {
 	case map[string]interface{}:
+		var graphqlErrs GraphqlErrors
+		var parentNulled bool
 		for _, selection := range selectionSet {
 			field := selection.(*ast.Field) // FIXME
 			value := result[field.Alias]
@@ -287,28 +289,37 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 					return nil, false, err
 				}
 				if nulled {
-					return errs, nulled, nil
+					if field.Definition.Type.NonNull {
+						parentNulled = true
+					} else {
+						result[field.Alias] = nil
+					}
 				}
+				graphqlErrs = append(graphqlErrs, errs...)
 			} else {
 				if value == nil && field.Definition.Type.NonNull {
-					return []GraphqlError{{Message: "TODO", Path: nil, Extensions: nil}}, true, nil
+					graphqlErrs = append(graphqlErrs, GraphqlError{Message: "TODO", Path: nil, Extensions: nil})
+					parentNulled = true
 				}
 			}
-			// FIXME aggregate errs
 		}
+		return graphqlErrs, parentNulled, nil
 	case []interface{}:
+		var graphqlErrs GraphqlErrors
+		var parentNulled bool
 		for _, value := range result {
 			errs, nulled, err := bubbleUpNullValuesInPlaceRec(schema, currentType, selectionSet, value)
 			if err != nil {
 				return nil, false, err
 			}
 			if nulled {
-				return errs, nulled, nil
+				// FIXME check nullability of ArrayType
+				parentNulled = true
 			}
-			// FIXME: aggregate errs
+			graphqlErrs = append(graphqlErrs, errs...)
 		}
+		return graphqlErrs, parentNulled, nil
 	default:
 		return nil, false, fmt.Errorf("bubbleUpNullValuesInPlaceRec: unxpected result type '%T'", result)
 	}
-	return nil, false, nil
 }

@@ -598,6 +598,65 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 		require.Nil(t, errs)
 	})
 
+	t.Run("1 expected null (bubble to middle)", func(t *testing.T) {
+		ddl := `
+		type Gizmo {
+			id: ID!
+			color: String!
+			owner: Owner
+		}
+
+		type Owner {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmos: [Gizmo!]
+			getOwners(ids: [ID!]!): [Owner!]!
+		}`
+
+		result := jsonToInterfaceMap(`
+			{
+				"gizmos": [
+					{ "id": "GIZMO1", "color": "RED" },
+					{ "id": "GIZMO2", "color": "GREEN" },
+					{ "id": "GIZMO3", "color": null }
+				]
+			}
+		`)
+
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+
+		selectionSet := []ast.Selection{
+			&ast.Field{
+				Alias:            "gizmos",
+				Name:             "gizmos",
+				Definition:       schema.Types["Query"].Fields.ForName("gizmos"),
+				ObjectDefinition: schema.Types["Owner"],
+				SelectionSet: []ast.Selection{
+					&ast.Field{
+						Alias:            "id",
+						Name:             "id",
+						Definition:       schema.Types["Gizmo"].Fields.ForName("id"),
+						ObjectDefinition: schema.Types["Gizmo"],
+					},
+					&ast.Field{
+						Alias:            "color",
+						Name:             "color",
+						Definition:       schema.Types["Gizmo"].Fields.ForName("color"),
+						ObjectDefinition: schema.Types["Gizmo"],
+					},
+				},
+			},
+		}
+
+		errs, err := bubbleUpNullValuesInPlace(schema, selectionSet, result)
+		require.NoError(t, err)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: nil, Extensions: nil}}), errs)
+		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": null }`), result)
+	})
+
 }
 
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {
