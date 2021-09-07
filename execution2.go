@@ -265,25 +265,50 @@ var ErrNullBubbledToRoot = errors.New("bubbleUpNullValuesInPlace: null bubbled u
 // unexpected null values and returns errors for each (these unexpected nulls are also bubbled up).
 // See https://spec.graphql.org/June2018/#sec-Errors-and-Non-Nullability
 func bubbleUpNullValuesInPlace(schema *ast.Schema, selectionSet ast.SelectionSet, result map[string]interface{}) (GraphqlErrors, error) {
-	return bubbleUpNullValuesInPlaceRec(schema, nil, selectionSet, result)
+	errs, nulled, err := bubbleUpNullValuesInPlaceRec(schema, nil, selectionSet, result)
+	if err != nil {
+		return nil, err
+	}
+	if nulled {
+		return nil, ErrNullBubbledToRoot
+	}
+	return errs, nil
 }
 
-func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, selectionSet ast.SelectionSet, result interface{}) (GraphqlErrors, error) {
+func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, selectionSet ast.SelectionSet, result interface{}) (GraphqlErrors, bool, error) {
 	switch result := result.(type) {
 	case map[string]interface{}:
 		for _, selection := range selectionSet {
-			field := selection.(*ast.Field)
+			field := selection.(*ast.Field) // FIXME
 			value := result[field.Alias]
 			if field.SelectionSet != nil {
-				errs, err := bubbleUpNullValuesInPlaceRec(schema, field.Definition.Type, field.SelectionSet, value)
+				errs, nulled, err := bubbleUpNullValuesInPlaceRec(schema, field.Definition.Type, field.SelectionSet, value)
 				if err != nil {
-					return errs, nil
+					return nil, false, err
+				}
+				if nulled {
+					return errs, nulled, nil
 				}
 			} else {
 				if value == nil && field.Definition.Type.NonNull {
-					return []GraphqlError{{Message: "WTF", Path: nil, Extensions: nil}}, nil
+					return []GraphqlError{{Message: "TODO", Path: nil, Extensions: nil}}, true, nil
 				}
 			}
+			// FIXME aggregate errs
 		}
+	case []interface{}:
+		for _, value := range result {
+			errs, nulled, err := bubbleUpNullValuesInPlaceRec(schema, currentType, selectionSet, value)
+			if err != nil {
+				return nil, false, err
+			}
+			if nulled {
+				return errs, nulled, nil
+			}
+			// FIXME: aggregate errs
+		}
+	default:
+		return nil, false, fmt.Errorf("bubbleUpNullValuesInPlaceRec: unxpected result type '%T'", result)
 	}
+	return nil, false, nil
 }
