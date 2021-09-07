@@ -488,63 +488,7 @@ func TestMergeExecutionResults(t *testing.T) {
 }
 
 func TestBubbleUpNullValuesInPlace(t *testing.T) {
-	// t.Run("no expected or unexpected nulls", func(t *testing.T) {
-	// 	ddl := `
-	// 	type Gizmo {
-	// 		id: ID!
-	// 		color: String!
-	// 		owner: Owner
-	// 	}
-
-	// 	type Owner {
-	// 		id: ID!
-	// 		name: String!
-	// 	}
-
-	// 	type Query {
-	// 		gizmos: [Gizmo!]!
-	// 		getOwners(ids: [ID!]!): [Owner!]!
-	// 	}`
-
-	// 	result := map[string]interface{}{
-	// 		"gizmos": []map[string]interface{}{
-	// 			{
-	// 				"id": "GIZMO1",
-	// 			},
-	// 			{
-	// 				"id": "GIZMO2",
-	// 			},
-	// 			{
-	// 				"id": "GIZMO3",
-	// 			},
-	// 		},
-	// 	}
-
-	// 	schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
-
-	// 	selectionSet := []ast.Selection{
-	// 		&ast.Field{
-	// 			Alias:            "gizmos",
-	// 			Name:             "gizmos",
-	// 			Definition:       schema.Types["Query"].Fields.ForName("gizmos"),
-	// 			ObjectDefinition: schema.Types["Owner"],
-	// 			SelectionSet: []ast.Selection{
-	// 				&ast.Field{
-	// 					Alias:            "id",
-	// 					Name:             "id",
-	// 					Definition:       schema.Types["Gizmo"].Fields.ForName("id"),
-	// 					ObjectDefinition: schema.Types["Gizmo"],
-	// 				},
-	// 			},
-	// 		},
-	// 	}
-
-	// 	errs, err := bubbleUpNullValuesInPlace(schema, selectionSet, result)
-	// 	require.NoError(t, err)
-	// 	require.Nil(t, errs)
-	// })
-
-	t.Run("1 expected null", func(t *testing.T) {
+	t.Run("no expected or unexpected nulls", func(t *testing.T) {
 		ddl := `
 		type Gizmo {
 			id: ID!
@@ -562,22 +506,67 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 			getOwners(ids: [ID!]!): [Owner!]!
 		}`
 
-		result := map[string]interface{}{
-			"gizmos": []interface{}{
-				map[string]interface{}{
-					"id":    "GIZMO1",
-					"color": "RED",
-				},
-				map[string]interface{}{
-					"id":    "GIZMO2",
-					"color": "GREEN",
-				},
-				map[string]interface{}{
-					"id":    "GIZMO3",
-					"color": nil,
+		result := jsonToInterfaceMap(`
+			{
+				"gizmos": [
+					{ "id": "GIZMO1" },
+					{ "id": "GIZMO2" },
+					{ "id": "GIZMO3" }
+				]
+			}
+		`)
+
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+
+		selectionSet := []ast.Selection{
+			&ast.Field{
+				Alias:            "gizmos",
+				Name:             "gizmos",
+				Definition:       schema.Types["Query"].Fields.ForName("gizmos"),
+				ObjectDefinition: schema.Types["Owner"],
+				SelectionSet: []ast.Selection{
+					&ast.Field{
+						Alias:            "id",
+						Name:             "id",
+						Definition:       schema.Types["Gizmo"].Fields.ForName("id"),
+						ObjectDefinition: schema.Types["Gizmo"],
+					},
 				},
 			},
 		}
+
+		errs, err := bubbleUpNullValuesInPlace(schema, selectionSet, result)
+		require.NoError(t, err)
+		require.Nil(t, errs)
+	})
+
+	t.Run("1 expected null (bubble to root)", func(t *testing.T) {
+		ddl := `
+		type Gizmo {
+			id: ID!
+			color: String!
+			owner: Owner
+		}
+
+		type Owner {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmos: [Gizmo!]!
+			getOwners(ids: [ID!]!): [Owner!]!
+		}`
+
+		result := jsonToInterfaceMap(`
+			{
+				"gizmos": [
+					{ "id": "GIZMO1", "color": "RED" },
+					{ "id": "GIZMO2", "color": "GREEN" },
+					{ "id": "GIZMO3", "color": null }
+				]
+			}
+		`)
 
 		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
 
