@@ -824,6 +824,55 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
 		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": [ { "id": "GIZMO1", "color": "RED" }, { "id": "GIZMO2", "color": "GREEN" }, null ]	}`), result)
 	})
+
+	t.Run("works with inline fragments", func(t *testing.T) {
+		ddl := `
+		type Gizmo {
+			id: ID!
+			color: String!
+			owner: Owner
+		}
+
+		type Owner {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmos: [Gizmo]!
+			getOwners(ids: [ID!]!): [Owner!]!
+		}`
+
+		resultJSON := `{
+			"gizmos": [
+				{ "id": "GIZMO1", "color": "RED" },
+				{ "id": "GIZMO2", "color": "GREEN" },
+				{ "id": "GIZMO3", "color": null }
+			]
+		}`
+
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+
+		query := `
+			{
+				gizmos {
+					... on Gizmo {
+						id
+						color
+					}
+				}
+			}
+		`
+
+		operation := gqlparser.MustLoadQuery(schema, query)
+
+		result := jsonToInterfaceMap(resultJSON)
+
+		errs, err := bubbleUpNullValuesInPlace(schema, operation.Operations[0].SelectionSet, result)
+		require.NoError(t, err)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": [ { "id": "GIZMO1", "color": "RED" }, { "id": "GIZMO2", "color": "GREEN" }, null ]	}`), result)
+	})
 }
 
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {

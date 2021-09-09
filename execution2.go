@@ -311,6 +311,15 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 				}
 				bubbleUp = lowerBubbleUp
 				errs = append(errs, lowerErrs...)
+			case *ast.InlineFragment:
+				fragment := selection
+				// FIXME: deal with type when inside interface
+				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, fragment.SelectionSet, result, path)
+				if lowerErr != nil {
+					return nil, false, lowerErr
+				}
+				bubbleUp = lowerBubbleUp
+				errs = append(errs, lowerErrs...)
 			default:
 				err = fmt.Errorf("unknown selection type: %T", selection)
 				return
