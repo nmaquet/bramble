@@ -873,6 +873,60 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
 		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": [ { "id": "GIZMO1", "color": "RED" }, { "id": "GIZMO2", "color": "GREEN" }, null ]	}`), result)
 	})
+
+	t.Run("fragment spread inside interface", func(t *testing.T) {
+		ddl := `
+		interface Critter {
+			id: ID!
+		}
+
+		type Gizmo implements Critter {
+			id: ID!
+			color: String!
+		}
+
+		type Gremlin implements Critter {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			critters: [Critter]!
+		}`
+
+		resultJSON := `{
+			"critters": [
+				{ "id": "GIZMO1", "color": "RED" },
+				{ "id": "GREMLIN1", "name": "Spikey" },
+				{ "id": "GIZMO2", "color": null }
+			]
+		}`
+
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+
+		query := `
+			{
+				critters {
+					id
+					... on Gizmo {
+						color
+					}
+					... on Gremlin {
+						name
+					}
+				}
+			}
+		`
+
+		operation := gqlparser.MustLoadQuery(schema, query)
+
+		result := jsonToInterfaceMap(resultJSON)
+
+		errs, err := bubbleUpNullValuesInPlace(schema, operation.Operations[0].SelectionSet, result)
+		require.NoError(t, err)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("critters"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, jsonToInterfaceMap(`{ "critters": [ { "id": "GIZMO1", "color": "RED" }, { "id": "GREMLIN1", "name": "Spikey" }, null ]	}`), result)
+	})
 }
 
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {
