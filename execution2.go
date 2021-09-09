@@ -279,33 +279,48 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 	switch result := result.(type) {
 	case map[string]interface{}:
 		for _, selection := range selectionSet {
-			field := selection.(*ast.Field) // FIXME
-			value := result[field.Alias]
-			if field.SelectionSet != nil {
-				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, field.Definition.Type, field.SelectionSet, value, append(path, ast.PathName(field.Alias)))
+			switch selection := selection.(type) {
+			case *ast.Field:
+				field := selection
+				value := result[field.Alias]
+				if field.SelectionSet != nil {
+					lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, field.Definition.Type, field.SelectionSet, value, append(path, ast.PathName(field.Alias)))
+					if lowerErr != nil {
+						return nil, false, lowerErr
+					}
+					if lowerBubbleUp {
+						if field.Definition.Type.NonNull {
+							bubbleUp = true
+						} else {
+							result[field.Alias] = nil
+						}
+					}
+					errs = append(errs, lowerErrs...)
+				} else {
+					if value == nil && field.Definition.Type.NonNull {
+						errs = append(errs, GraphqlError{Message: "TODO", Path: append(path, ast.PathName(field.Alias)), Extensions: nil})
+						bubbleUp = true
+					}
+				}
+			case *ast.FragmentSpread:
+				fragment := selection
+				// FIXME: deal with type when inside interface
+				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, fragment.Definition.SelectionSet, result, path)
 				if lowerErr != nil {
 					return nil, false, lowerErr
 				}
-				if lowerBubbleUp {
-					if field.Definition.Type.NonNull {
-						bubbleUp = true
-					} else {
-						result[field.Alias] = nil
-					}
-				}
+				bubbleUp = lowerBubbleUp
 				errs = append(errs, lowerErrs...)
-			} else {
-				if value == nil && field.Definition.Type.NonNull {
-					errs = append(errs, GraphqlError{Message: "TODO", Path: append(path, ast.PathName(field.Alias)), Extensions: nil})
-					bubbleUp = true
-				}
+			default:
+				err = fmt.Errorf("unknown selection type: %T", selection)
+				return
 			}
 		}
 	case []interface{}:
 		for i, value := range result {
 			lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, selectionSet, value, append(path, ast.PathIndex(i)))
 			if lowerErr != nil {
-				return nil, false, err
+				return nil, false, lowerErr
 			}
 			if lowerBubbleUp {
 				if currentType.Elem.NonNull {
