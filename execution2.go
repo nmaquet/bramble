@@ -1,7 +1,9 @@
 package bramble
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -356,6 +358,46 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 		return nil, false, fmt.Errorf("bubbleUpNullValuesInPlaceRec: unxpected result type '%T'", result)
 	}
 	return
+}
+
+func formatResponseBody(schema *ast.Schema, selectionSet ast.SelectionSet, result map[string]interface{}, errs GraphqlErrors) (string, error) {
+	errsJSON, err := json.Marshal(errs)
+	if err != nil {
+		return "", err
+	}
+	dataJSON, err := formatResponseDataRec(schema, selectionSet, result)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`{"data":%s, "errors":[%s]}`, dataJSON, errsJSON), nil
+}
+
+func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, result interface{}) (string, error) {
+	var buf bytes.Buffer
+	switch result := result.(type) {
+	case map[string]interface{}:
+		buf.WriteString("{")
+		for _, field := range selectionFields(selectionSet) {
+			buf.WriteString(fmt.Sprintf(`"%s":%s`, field.Alias))
+		}
+
+	}
+}
+
+func selectionFields(selectionSet ast.SelectionSet) []*ast.Field {
+	var result []*ast.Field
+	for _, selection := range selectionSet {
+		switch selection := selection.(type) {
+		case *ast.Field:
+			result = append(result, selection)
+		case *ast.FragmentSpread:
+			definition := selection.Definition
+			result = append(result, selectionFields(definition.SelectionSet)...)
+		case *ast.InlineFragment:
+			result = append(result, selectionFields(selection.SelectionSet)...)
+		}
+	}
+	return result
 }
 
 func implementsInterface(schema *ast.Schema, objectType, interfaceType string) bool {
