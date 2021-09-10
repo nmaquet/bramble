@@ -808,59 +808,117 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": [ { "id": "GIZMO1", "color": "RED", "__typename": "Gizmo" }, { "id": "GIZMO2", "color": "GREEN", "__typename": "Gizmo" }, null ]	}`), result)
 	})
 
-	// t.Run("fragment spread inside interface", func(t *testing.T) {
-	// 	ddl := `
-	// 	interface Critter {
-	// 		id: ID!
-	// 	}
+	t.Run("inline fragment inside interface", func(t *testing.T) {
+		ddl := `
+		interface Critter {
+			id: ID!
+		}
 
-	// 	type Gizmo implements Critter {
-	// 		id: ID!
-	// 		color: String!
-	// 	}
+		type Gizmo implements Critter {
+			id: ID!
+			color: String!
+		}
 
-	// 	type Gremlin implements Critter {
-	// 		id: ID!
-	// 		name: String!
-	// 	}
+		type Gremlin implements Critter {
+			id: ID!
+			name: String!
+		}
 
-	// 	type Query {
-	// 		critters: [Critter]!
-	// 	}`
+		type Query {
+			critters: [Critter]!
+		}`
 
-	// 	resultJSON := `{
-	// 		"critters": [
-	// 			{ "id": "GIZMO1", "color": "RED" },
-	// 			{ "id": "GREMLIN1", "name": "Spikey" },
-	// 			{ "id": "GIZMO2", "color": null }
-	// 		]
-	// 	}`
+		resultJSON := `{
+			"critters": [
+				{ "id": "GIZMO1", "color": "RED", "__typename": "Gizmo" },
+				{ "id": "GREMLIN1", "name": "Spikey", "__typename": "Gremlin" },
+				{ "id": "GIZMO2", "color": null, "__typename": "Gizmo" }
+			]
+		}`
 
-	// 	schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
 
-	// 	query := `
-	// 		{
-	// 			critters {
-	// 				id
-	// 				... on Gizmo {
-	// 					color
-	// 				}
-	// 				... on Gremlin {
-	// 					name
-	// 				}
-	// 			}
-	// 		}
-	// 	`
+		query := `
+			{
+				critters {
+					id
+					... on Gizmo {
+						color
+						__typename
+					}
+					... on Gremlin {
+						name
+						__typename
+					}
+				}
+			}
+		`
 
-	// 	operation := gqlparser.MustLoadQuery(schema, query)
+		document := gqlparser.MustLoadQuery(schema, query)
+		result := jsonToInterfaceMap(resultJSON)
+		errs, err := bubbleUpNullValuesInPlace(schema, document.Operations[0].SelectionSet, result)
+		require.NoError(t, err)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("critters"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, jsonToInterfaceMap(`{ "critters": [ { "id": "GIZMO1", "color": "RED", "__typename": "Gizmo"  }, { "id": "GREMLIN1", "name": "Spikey", "__typename": "Gremlin" }, null ]	}`), result)
+	})
 
-	// 	result := jsonToInterfaceMap(resultJSON)
+	t.Run("fragment spread inside interface", func(t *testing.T) {
+		ddl := `
+		interface Critter {
+			id: ID!
+		}
 
-	// 	errs, err := bubbleUpNullValuesInPlace(schema, operation.Operations[0].SelectionSet, result)
-	// 	require.NoError(t, err)
-	// 	require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("critters"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
-	// 	require.Equal(t, jsonToInterfaceMap(`{ "critters": [ { "id": "GIZMO1", "color": "RED" }, { "id": "GREMLIN1", "name": "Spikey" }, null ]	}`), result)
-	// })
+		type Gizmo implements Critter {
+			id: ID!
+			color: String!
+		}
+
+		type Gremlin implements Critter {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			critters: [Critter]!
+		}`
+
+		resultJSON := `{
+			"critters": [
+				{ "id": "GIZMO1", "color": "RED", "__typename": "Gizmo" },
+				{ "id": "GREMLIN1", "name": "Spikey", "__typename": "Gremlin" },
+				{ "id": "GIZMO2", "color": null, "__typename": "Gizmo" }
+			]
+		}`
+
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+
+		query := `
+			fragment CritterDetails on Critter {
+				... on Gizmo {
+					color
+					__typename
+				}
+				... on Gremlin {
+					name
+					__typename
+				}
+			}
+
+			{
+				critters {
+					id
+					... CritterDetails
+				}
+			}
+		`
+
+		document := gqlparser.MustLoadQuery(schema, query)
+		result := jsonToInterfaceMap(resultJSON)
+		errs, err := bubbleUpNullValuesInPlace(schema, document.Operations[0].SelectionSet, result)
+		require.NoError(t, err)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("critters"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, jsonToInterfaceMap(`{ "critters": [ { "id": "GIZMO1", "color": "RED", "__typename": "Gizmo"  }, { "id": "GREMLIN1", "name": "Spikey", "__typename": "Gremlin" }, null ]	}`), result)
+	})
 }
 
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {

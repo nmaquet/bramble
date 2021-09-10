@@ -304,7 +304,13 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 				}
 			case *ast.FragmentSpread:
 				fragment := selection
-				// FIXME: deal with type when inside interface
+				typename, ok := result["__typename"].(string)
+				if !ok {
+					return nil, false, errors.New("missing expected __typename")
+				}
+				if typename != fragment.Definition.TypeCondition && !implementsInterface(schema, typename, fragment.Definition.TypeCondition) {
+					continue
+				}
 				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, fragment.Definition.SelectionSet, result, path)
 				if lowerErr != nil {
 					return nil, false, lowerErr
@@ -313,7 +319,13 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 				errs = append(errs, lowerErrs...)
 			case *ast.InlineFragment:
 				fragment := selection
-				// FIXME: deal with type when inside interface
+				typename, ok := result["__typename"].(string)
+				if !ok {
+					return nil, false, errors.New("missing expected __typename")
+				}
+				if typename != fragment.TypeCondition && !implementsInterface(schema, typename, fragment.TypeCondition) {
+					continue
+				}
 				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, fragment.SelectionSet, result, path)
 				if lowerErr != nil {
 					return nil, false, lowerErr
@@ -344,4 +356,13 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 		return nil, false, fmt.Errorf("bubbleUpNullValuesInPlaceRec: unxpected result type '%T'", result)
 	}
 	return
+}
+
+func implementsInterface(schema *ast.Schema, objectType, interfaceType string) bool {
+	for _, def := range schema.Implements[objectType] {
+		if def.Name == interfaceType {
+			return true
+		}
+	}
+	return false
 }
