@@ -361,15 +361,22 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 }
 
 func formatResponseBody(schema *ast.Schema, selectionSet ast.SelectionSet, result map[string]interface{}, errs GraphqlErrors) (string, error) {
-	errsJSON, err := json.Marshal(errs)
-	if err != nil {
-		return "", err
-	}
+	var buf bytes.Buffer
 	dataJSON, err := formatResponseDataRec(schema, selectionSet, result)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`{"data":%s, "errors":[%s]}`, dataJSON, errsJSON), nil
+	buf.WriteString(fmt.Sprintf(`{"data":%s`, dataJSON))
+
+	if len(errs) > 0 {
+		errsJSON, err := json.Marshal(errs)
+		if err != nil {
+			return "", err
+		}
+		buf.WriteString(fmt.Sprintf(`,"errors":%s`, errsJSON))
+	}
+	buf.WriteString("}")
+	return buf.String(), nil
 }
 
 func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, result interface{}) (string, error) {
@@ -377,11 +384,48 @@ func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, re
 	switch result := result.(type) {
 	case map[string]interface{}:
 		buf.WriteString("{")
-		for _, field := range selectionFields(selectionSet) {
-			buf.WriteString(fmt.Sprintf(`"%s":%s`, field.Alias))
-		}
+		fields := selectionFields(selectionSet)
+		for i, field := range fields {
+			fieldData, ok := result[field.Alias]
+			if !ok {
+				return "", fmt.Errorf("could not find value in data for field %s", field.Alias)
+			}
+			buf.WriteString(fmt.Sprintf(`"%s":`, field.Alias))
+			if field.SelectionSet != nil {
+				innerBody, err := formatResponseDataRec(schema, field.SelectionSet, fieldData)
+				if err != nil {
+					return "", err
+				}
+				buf.WriteString(innerBody)
+			} else {
+				fieldJSON, err := json.Marshal(&fieldData)
+				if err != nil {
+					return "", err
+				}
+				buf.Write(fieldJSON)
+			}
 
+			if i < len(fields)-1 {
+				buf.WriteString(",")
+			}
+		}
+		buf.WriteString("}")
+	case []interface{}:
+		buf.WriteString("[")
+		for i, v := range result {
+			innerBody, err := formatResponseDataRec(schema, selectionSet, v)
+			if err != nil {
+				return "", err
+			}
+			buf.WriteString(innerBody)
+
+			if i < len(result)-1 {
+				buf.WriteString(",")
+			}
+		}
+		buf.WriteString("]")
 	}
+	return buf.String(), nil
 }
 
 func selectionFields(selectionSet ast.SelectionSet) []*ast.Field {

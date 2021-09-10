@@ -921,6 +921,132 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 	})
 }
 
+func TestFormatResponseBody(t *testing.T) {
+	t.Run("simple response with no errors", func(t *testing.T) {
+		ddl := `
+		type Gizmo {
+			id: ID!
+			color: String!
+			owner: Owner
+		}
+
+		type Owner {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmos: [Gizmo!]!
+		}`
+
+		result := jsonToInterfaceMap(`
+			{
+				"gizmos": [
+					{ "color": "RED","owner": { "name": "Owner1", "id": "1" }, "id": "GIZMO1" },
+					{ "color": "BLUE","owner": { "name": "Owner2", "id": "2" }, "id": "GIZMO2" },
+					{ "color": "GREEN","owner": { "name": "Owner3", "id": "3" }, "id": "GIZMO3" }
+				]
+			}
+		`)
+
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+
+		query := `
+			{
+				gizmos {
+					id
+					color
+					owner {
+						id
+						name
+					}
+				}
+			}`
+
+		expectedJSON := `
+			{
+				"data" : {
+					"gizmos": [
+						{ "id": "GIZMO1", "color": "RED", "owner": { "id": "1", "name": "Owner1" } },
+						{ "id": "GIZMO2", "color": "BLUE", "owner": { "id": "2", "name": "Owner2" } },
+						{ "id": "GIZMO3", "color": "GREEN", "owner": { "id": "3", "name": "Owner3" } }
+					]
+				}
+			}`
+
+		document := gqlparser.MustLoadQuery(schema, query)
+		bodyJSON, err := formatResponseBody(schema, document.Operations[0].SelectionSet, result, nil)
+		require.NoError(t, err)
+		require.JSONEq(t, expectedJSON, bodyJSON)
+	})
+
+	t.Run("simple response with errors", func(t *testing.T) {
+		ddl := `
+		type Gizmo {
+			id: ID!
+			color: String!
+			owner: Owner
+		}
+
+		type Owner {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmos: [Gizmo!]!
+		}`
+
+		result := jsonToInterfaceMap(`
+			{
+				"gizmos": [
+					{ "color": "RED","owner": { "name": "Owner1", "id": "1" }, "id": "GIZMO1" },
+					{ "color": "BLUE","owner": { "name": "Owner2", "id": "2" }, "id": "GIZMO2" },
+					{ "color": "GREEN","owner": { "name": "Owner3", "id": "3" }, "id": "GIZMO3" }
+				]
+			}
+		`)
+
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: ddl})
+
+		query := `
+			{
+				gizmos {
+					id
+					color
+					owner {
+						id
+						name
+					}
+				}
+			}`
+
+		expectedJSON := `
+			{
+				"data" : {
+					"gizmos": [
+						{ "id": "GIZMO1", "color": "RED", "owner": { "id": "1", "name": "Owner1" } },
+						{ "id": "GIZMO2", "color": "BLUE", "owner": { "id": "2", "name": "Owner2" } },
+						{ "id": "GIZMO3", "color": "GREEN", "owner": { "id": "3", "name": "Owner3" } }
+					]
+				},
+				"errors": [
+					{
+						"message": "field failed to resolve",
+						"path": ["gizmos", 2, "color"],
+						"extensions": null
+					}
+				]
+			}`
+
+		document := gqlparser.MustLoadQuery(schema, query)
+		errs := GraphqlErrors([]GraphqlError{{Message: "field failed to resolve", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}})
+		bodyJSON, err := formatResponseBody(schema, document.Operations[0].SelectionSet, result, errs)
+		require.NoError(t, err)
+		require.JSONEq(t, expectedJSON, bodyJSON)
+	})
+}
+
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {
 	var outputMap map[string]interface{}
 	err := json.Unmarshal([]byte(jsonString), &outputMap)
