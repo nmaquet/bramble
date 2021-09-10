@@ -311,7 +311,7 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 				if typename != fragment.Definition.TypeCondition && !implementsInterface(schema, typename, fragment.Definition.TypeCondition) {
 					continue
 				}
-				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, fragment.Definition.SelectionSet, result, path)
+				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, nil, fragment.Definition.SelectionSet, result, path)
 				if lowerErr != nil {
 					return nil, false, lowerErr
 				}
@@ -326,7 +326,7 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 				if typename != fragment.TypeCondition && !implementsInterface(schema, typename, fragment.TypeCondition) {
 					continue
 				}
-				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, fragment.SelectionSet, result, path)
+				lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, nil, fragment.SelectionSet, result, path)
 				if lowerErr != nil {
 					return nil, false, lowerErr
 				}
