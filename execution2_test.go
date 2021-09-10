@@ -616,7 +616,7 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 		document := gqlparser.MustLoadQuery(schema, query)
 		errs, err := bubbleUpNullValuesInPlace(schema, document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
-		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "field failed to resolve", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
 		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": null }`), result)
 	})
 
@@ -661,7 +661,7 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 		document := gqlparser.MustLoadQuery(schema, query)
 		errs, err := bubbleUpNullValuesInPlace(schema, document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
-		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(1), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "field failed to resolve", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(1), ast.PathName("color")}, Extensions: nil}}), errs)
 		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": [ { "id": "GIZMO1", "color": "RED" }, null, { "id": "GIZMO2", "color": "GREEN" } ]	}`), result)
 	})
 
@@ -756,7 +756,7 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 
 		errs, err := bubbleUpNullValuesInPlace(schema, document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
-		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "field failed to resolve", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
 		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": [ { "id": "GIZMO1", "color": "RED", "__typename": "Gizmo" }, { "id": "GIZMO2", "color": "GREEN", "__typename": "Gizmo" }, null ]	}`), result)
 	})
 
@@ -804,7 +804,7 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 		result := jsonToInterfaceMap(resultJSON)
 		errs, err := bubbleUpNullValuesInPlace(schema, document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
-		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "field failed to resolve", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
 		require.Equal(t, jsonToInterfaceMap(`{ "gizmos": [ { "id": "GIZMO1", "color": "RED", "__typename": "Gizmo" }, { "id": "GIZMO2", "color": "GREEN", "__typename": "Gizmo" }, null ]	}`), result)
 	})
 
@@ -858,7 +858,7 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 		result := jsonToInterfaceMap(resultJSON)
 		errs, err := bubbleUpNullValuesInPlace(schema, document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
-		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("critters"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "field failed to resolve", Path: ast.Path{ast.PathName("critters"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
 		require.Equal(t, jsonToInterfaceMap(`{ "critters": [ { "id": "GIZMO1", "color": "RED", "__typename": "Gizmo"  }, { "id": "GREMLIN1", "name": "Spikey", "__typename": "Gremlin" }, null ]	}`), result)
 	})
 
@@ -916,7 +916,7 @@ func TestBubbleUpNullValuesInPlace(t *testing.T) {
 		result := jsonToInterfaceMap(resultJSON)
 		errs, err := bubbleUpNullValuesInPlace(schema, document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
-		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "TODO", Path: ast.Path{ast.PathName("critters"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
+		require.Equal(t, GraphqlErrors([]GraphqlError{{Message: "field failed to resolve", Path: ast.Path{ast.PathName("critters"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}}), errs)
 		require.Equal(t, jsonToInterfaceMap(`{ "critters": [ { "id": "GIZMO1", "color": "RED", "__typename": "Gizmo"  }, { "id": "GREMLIN1", "name": "Spikey", "__typename": "Gremlin" }, null ]	}`), result)
 	})
 }
