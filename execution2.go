@@ -34,6 +34,43 @@ func newQueryExecution2(client *GraphQLClient, schema *ast.Schema, boundaryQueri
 		boundaryQueries: boundaryQueries,
 	}
 }
+
+func BuildTypenameResponseMap(selectionSet ast.SelectionSet, parentTypeName string) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+	for _, field := range selectionSetToFields(selectionSet) {
+		if field.SelectionSet != nil {
+			if field.Definition.Type.NamedType == "" {
+				return nil, fmt.Errorf("expected named type")
+			}
+
+			if !hasNamespaceDirective(field.Directives) {
+				return nil, fmt.Errorf("expected namespace directive")
+			}
+
+			var err error
+			result[field.Alias], err = BuildTypenameResponseMap(field.SelectionSet, field.Definition.Type.Name())
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if field.Name != "__typename" {
+				return nil, fmt.Errorf("expected __typename")
+			}
+			result[field.Alias] = parentTypeName
+		}
+	}
+	return result, nil
+}
+
+func hasNamespaceDirective(directiveList ast.DirectiveList) bool {
+	for _, directive := range directiveList {
+		if directive.Name == "@namespace" {
+			return true
+		}
+	}
+	return false
+}
+
 // FIXME: dedupe result?
 func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, error) {
 	ptr := data
