@@ -8,9 +8,32 @@ import (
 	"fmt"
 	"strings"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
+type QueryExecution2 struct {
+	Schema       *ast.Schema
+	Errors       []*gqlerror.Error
+	RequestCount int64
+
+	// FIXME: implement
+	maxRequest int64
+	// FIXME: implement?
+	tracer        opentracing.Tracer
+	graphqlClient GraphQLClientInterface
+	// FIXME: rename the entire type
+	boundaryQueries BoundaryQueriesMap
+}
+
+func newQueryExecution2(client *GraphQLClient, schema *ast.Schema, boundaryQueries BoundaryQueriesMap) *QueryExecution2 {
+	return &QueryExecution2{
+		Schema:          schema,
+		graphqlClient:   client,
+		boundaryQueries: boundaryQueries,
+	}
+}
 // FIXME: dedupe result?
 func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, error) {
 	ptr := data

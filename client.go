@@ -16,6 +16,11 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
+// FIXME: rename to GraphQLCLient, rename current to GraphQLHTTPClient
+type GraphQLClientInterface interface {
+	Request(ctx context.Context, url string, request *Request, out interface{}) error
+}
+
 // GraphQLClient is a GraphQL client.
 type GraphQLClient struct {
 	HTTPClient      *http.Client
