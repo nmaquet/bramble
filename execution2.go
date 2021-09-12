@@ -360,9 +360,9 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 	return
 }
 
-func formatResponseBody(schema *ast.Schema, selectionSet ast.SelectionSet, result map[string]interface{}, errs GraphqlErrors) (string, error) {
+func formatResponseBody(selectionSet ast.SelectionSet, result map[string]interface{}, errs GraphqlErrors) (string, error) {
 	var buf bytes.Buffer
-	dataJSON, err := formatResponseDataRec(schema, selectionSet, result)
+	dataJSON, err := formatResponseDataRec(selectionSet, result)
 	if err != nil {
 		return "", err
 	}
@@ -379,7 +379,7 @@ func formatResponseBody(schema *ast.Schema, selectionSet ast.SelectionSet, resul
 	return buf.String(), nil
 }
 
-func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, result interface{}) (string, error) {
+func formatResponseDataRec(selectionSet ast.SelectionSet, result interface{}) (string, error) {
 	var buf bytes.Buffer
 	switch result := result.(type) {
 	case map[string]interface{}:
@@ -392,7 +392,7 @@ func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, re
 			}
 			buf.WriteString(fmt.Sprintf(`"%s":`, field.Alias))
 			if field.SelectionSet != nil {
-				innerBody, err := formatResponseDataRec(schema, field.SelectionSet, fieldData)
+				innerBody, err := formatResponseDataRec(field.SelectionSet, fieldData)
 				if err != nil {
 					return "", err
 				}
@@ -413,7 +413,7 @@ func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, re
 	case []interface{}:
 		buf.WriteString("[")
 		for i, v := range result {
-			innerBody, err := formatResponseDataRec(schema, selectionSet, v)
+			innerBody, err := formatResponseDataRec(selectionSet, v)
 			if err != nil {
 				return "", err
 			}

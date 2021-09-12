@@ -975,7 +975,7 @@ func TestFormatResponseBody(t *testing.T) {
 			}`
 
 		document := gqlparser.MustLoadQuery(schema, query)
-		bodyJSON, err := formatResponseBody(schema, document.Operations[0].SelectionSet, result, nil)
+		bodyJSON, err := formatResponseBody(document.Operations[0].SelectionSet, result, nil)
 		require.NoError(t, err)
 		require.JSONEq(t, expectedJSON, bodyJSON)
 	})
@@ -1041,7 +1041,7 @@ func TestFormatResponseBody(t *testing.T) {
 
 		document := gqlparser.MustLoadQuery(schema, query)
 		errs := GraphqlErrors([]GraphqlError{{Message: "field failed to resolve", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}})
-		bodyJSON, err := formatResponseBody(schema, document.Operations[0].SelectionSet, result, errs)
+		bodyJSON, err := formatResponseBody(document.Operations[0].SelectionSet, result, errs)
 		require.NoError(t, err)
 		require.JSONEq(t, expectedJSON, bodyJSON)
 	})
