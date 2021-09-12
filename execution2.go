@@ -35,6 +35,19 @@ func newQueryExecution2(client *GraphQLClient, schema *ast.Schema, boundaryQueri
 	}
 }
 
+
+func ExecuteBrambleStep(queryPlanStep *QueryPlanStep) (*ExecutionResult, error) {
+	result, err := BuildTypenameResponseMap(queryPlanStep.SelectionSet, queryPlanStep.ParentType)
+	if err != nil {
+		return nil, err
+	}
+	return &ExecutionResult{
+		ServiceURL:     internalServiceName,
+		InsertionPoint: []string{},
+		Data:           result,
+	}, nil
+}
+
 func BuildTypenameResponseMap(selectionSet ast.SelectionSet, parentTypeName string) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 	for _, field := range selectionSetToFields(selectionSet) {
