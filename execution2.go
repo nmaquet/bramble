@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -35,6 +36,106 @@ func newQueryExecution2(client *GraphQLClient, schema *ast.Schema, boundaryQueri
 	}
 }
 
+func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]ExecutionResult, error) {
+	stepWg := &sync.WaitGroup{}
+	readWg := &sync.WaitGroup{}
+	resultsChan := make(chan ExecutionResult)
+	results := []ExecutionResult{}
+	for _, step := range queryPlan.RootSteps {
+		if step.ServiceURL == internalServiceName {
+			r, err := ExecuteBrambleStep(step)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, *r)
+		}
+		stepWg.Add(1)
+		go q.ExecuteRootStep(ctx, *step, resultsChan, stepWg)
+
+	}
+
+	readWg.Add(1)
+	go func() {
+		for result := range resultsChan {
+			results = append(results, result)
+		}
+		readWg.Done()
+	}()
+	stepWg.Wait()
+	close(resultsChan)
+	readWg.Wait()
+	return results, nil
+}
+
+func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanStep, resultsChan chan ExecutionResult, waitGroup *sync.WaitGroup) {
+	defer waitGroup.Done()
+	var document string
+	if step.ParentType == "Query" {
+		document = "query " + formatSelectionSet(ctx, q.Schema, step.SelectionSet)
+	} else if step.ParentType == "Mutation" {
+		document = "mutation " + formatSelectionSet(ctx, q.Schema, step.SelectionSet)
+	} else {
+		// FIXME: error handling with channels
+		panic("non mutation or query root step")
+	}
+
+	data, err := q.executeDocument(ctx, document, step.ServiceURL)
+	if err != nil {
+		// FIXME: error handling with channels
+		panic(err)
+	}
+	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
+	for _, childStep := range step.Then {
+		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint)
+		if err != nil {
+			// FIXME: error handling with channels
+			panic(err)
+		}
+		waitGroup.Add(1)
+		go q.executeChildStep(ctx, *childStep, boundaryIDs, resultsChan, waitGroup)
+	}
+}
+
+func (q *QueryExecution2) executeDocument(ctx context.Context, document string, serviceURL string) (map[string]interface{}, error) {
+	var response map[string]interface{}
+	req := NewRequest(document)
+	req.Headers = GetOutgoingRequestHeadersFromContext(ctx)
+	err := q.graphqlClient.Request(ctx, serviceURL, req, &response)
+	return response, err
+}
+
+func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanStep, boundaryIDs []string, resultsChan chan ExecutionResult, waitGroup *sync.WaitGroup) {
+	defer waitGroup.Done()
+
+	boundaryFieldGetter := q.boundaryQueries.Query(step.ServiceURL, step.ParentType)
+
+	documents, err := buildBoundaryQueryDocuments(ctx, q.Schema, step, boundaryIDs, boundaryFieldGetter, 50)
+	if err != nil {
+		// FIXME: error handling with channels
+		panic(err)
+	}
+	data := make(map[string]interface{})
+	for _, document := range documents {
+		partialData, err := q.executeDocument(ctx, document, step.ServiceURL)
+		if err != nil {
+			// FIXME: error handling with channels
+			panic(err)
+		}
+		for id, value := range partialData {
+			data[id] = value
+		}
+	}
+	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
+	for _, childStep := range step.Then {
+		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint)
+		if err != nil {
+			// FIXME: error handling with channels
+			panic(err)
+		}
+		waitGroup.Add(1)
+		go q.executeChildStep(ctx, *childStep, boundaryIDs, resultsChan, waitGroup)
+	}
+}
 
 func ExecuteBrambleStep(queryPlanStep *QueryPlanStep) (*ExecutionResult, error) {
 	result, err := BuildTypenameResponseMap(queryPlanStep.SelectionSet, queryPlanStep.ParentType)
