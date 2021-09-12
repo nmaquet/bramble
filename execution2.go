@@ -28,7 +28,7 @@ type QueryExecution2 struct {
 	boundaryQueries BoundaryQueriesMap
 }
 
-func newQueryExecution2(client *GraphQLClient, schema *ast.Schema, boundaryQueries BoundaryQueriesMap) *QueryExecution2 {
+func newQueryExecution2(client GraphQLClientInterface, schema *ast.Schema, boundaryQueries BoundaryQueriesMap) *QueryExecution2 {
 	return &QueryExecution2{
 		Schema:          schema,
 		graphqlClient:   client,

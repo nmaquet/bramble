@@ -1,13 +1,87 @@
 package bramble
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
+
+type MockGraphQLClient struct {
+	mock.Mock
+	mockJSONResponse string
+}
+
+func (m *MockGraphQLClient) Request(ctx context.Context, url string, request *Request, out interface{}) error {
+	args := m.Called(ctx, url, request, out)
+	err := json.Unmarshal([]byte(m.mockJSONResponse), &out)
+	if err != nil {
+		return err
+	}
+	return args.Error(0)
+}
+
+func TestQueryExecution(t *testing.T) {
+	t.Run("executes single service query plan", func(t *testing.T) {
+		f := PlanTestFixture2
+		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: f.Schema})
+		query := "{ gizmos { id name gadgets { id name gimmicks { id name } } } }"
+		operation := gqlparser.MustLoadQuery(schema, query)
+		require.Len(t, operation.Operations, 1, "bad test: query must be a single operation")
+		plan, err := Plan(&PlanningContext{operation.Operations[0], schema, f.Locations, f.IsBoundary, map[string]*Service{
+			"A": {Name: "A", ServiceURL: "A"},
+			"B": {Name: "B", ServiceURL: "B"},
+			"C": {Name: "C", ServiceURL: "C"},
+		}})
+		require.NoError(t, err)
+
+		serviceResponseJSON := `{
+			"gizmos": [
+				{
+					"id": "GIZMO1",
+					"name": "Gizmo #1",
+					"gadgets": [
+						{
+							"id": "GADGET1",
+							"name": "Gadget #1",
+							"gimmicks": [
+								{
+									"id": "GIMMICK1",
+									"name": "Gimmick #1"
+								}
+							]
+						}
+					]
+				}
+			]
+		}`
+
+		mockClient := &MockGraphQLClient{
+			mockJSONResponse: serviceResponseJSON,
+		}
+
+		mockClient.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		queryExecution := newQueryExecution2(mockClient, schema, nil)
+
+		ctx := testContextWithoutVariables(operation.Operations[0])
+
+		result, err := queryExecution.Execute(ctx, *plan)
+		require.NoError(t, err)
+
+		require.Equal(t, []ExecutionResult{
+			{
+				ServiceURL: "A",
+				Data:       jsonToInterfaceMap(serviceResponseJSON),
+			},
+		}, result)
+
+	})
+}
 
 func TestExtractBoundaryIDs(t *testing.T) {
 	dataJSON := `{
