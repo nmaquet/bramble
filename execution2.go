@@ -28,7 +28,7 @@ type QueryExecution2 struct {
 	boundaryQueries BoundaryQueriesMap
 }
 
-func newQueryExecution2(client *GraphQLClient, schema *ast.Schema, boundaryQueries BoundaryQueriesMap) *QueryExecution2 {
+func newQueryExecution2(client GraphQLClientInterface, schema *ast.Schema, boundaryQueries BoundaryQueriesMap) *QueryExecution2 {
 	return &QueryExecution2{
 		Schema:          schema,
 		graphqlClient:   client,
@@ -79,6 +79,7 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 		panic("non mutation or query root step")
 	}
 
+	// FIXME: handle downstream errors in result object
 	data, err := q.executeDocument(ctx, document, step.ServiceURL)
 	if err != nil {
 		// FIXME: error handling with channels
