@@ -345,8 +345,7 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 		}
 	}
 
-	// FIXME: pass in actual errors
-	formattedResponse, err := formatResponseBody(op.SelectionSet, mergedResult, nil)
+	formattedResponse, err := formatResponseBody(op.SelectionSet, mergedResult)
 	if err != nil {
 		errs = append(errs, &gqlerror.Error{Message: err.Error()})
 		AddField(ctx, "errors", errs)

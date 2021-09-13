@@ -3,6 +3,7 @@ package bramble
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -14,285 +15,47 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
-func TestExecution2FederatedQueryFragmentSpreads(t *testing.T) {
-	// 	serviceA := testService{
-	// 		schema: `
-	// 		directive @boundary on OBJECT
-	// 		interface Snapshot {
-	// 			id: ID!
-	// 			name: String!
-	// 		}
+func TestQueryExecution2WithSingleService(t *testing.T) {
+	f := &queryExecution2Fixture{
+		services: []testService{
+			{
+				schema: `type Movie {
+					id: ID!
+					title: String
+				}
 
-	// 		type Gizmo @boundary {
-	// 			id: ID!
-	// 		}
+				type Query {
+					movie(id: ID!): Movie!
+				}
+				`,
+				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte(`{
+						"data": {
+							"movie": {
+								"id": "1",
+								"title": "Test title"
+							}
+						}
+					}`))
+				}),
+			},
+		},
+		query: `{
+			movie(id: "1") {
+				id
+				title
+			}
+		}`,
+		expected: `{
+			"movie": {
+				"id": "1",
+				"title": "Test title"
+			}
+		}`,
+	}
 
-	// 		type SnapshotImplementation implements Snapshot {
-	// 			id: ID!
-	// 			name: String!
-	// 			gizmos: [Gizmo!]!
-	// 		}
-
-	// 		type Query {
-	// 			snapshot(id: ID!): Snapshot!
-	// 		}`,
-	// 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	// 			w.Write([]byte(`
-	// 			{
-	// 				"data": {
-	// 					"snapshot": {
-	// 						"id": "100",
-	// 						"name": "foo",
-	// 						"gizmos": [{ "id": "1" }]
-	// 					}
-	// 				}
-	// 			}`))
-	// 		}),
-	// 	}
-
-	// 	serviceB := testService{
-	// 		schema: `
-	// 		directive @boundary on OBJECT
-	// 		type Gizmo @boundary {
-	// 			id: ID!
-	// 			name: String!
-	// 		}
-
-	// 		type Query {
-	// 			gizmo(id: ID!): Gizmo @boundary
-	// 		}`,
-	// 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	// 			w.Write([]byte(`
-	// 			{
-	// 				"data": {
-	// 					"_0": {
-	// 						"_id": "1",
-	// 						"name": "Gizmo #1"
-	// 					}
-	// 				}
-	// 			}`))
-	// 		}),
-	// 	}
-
-	// 	t.Run("with inline fragment spread", func(t *testing.T) {
-	// 		f := &queryExecution2Fixture{
-	// 			services: []testService{serviceA, serviceB},
-	// 			query: `
-	// 			query Foo {
-	// 				snapshot(id: "foo") {
-	// 					id
-	// 					name
-	// 					... on SnapshotImplementation {
-	// 						gizmos {
-	// 							id
-	// 							name
-	// 						}
-	// 					}
-	// 				}
-	// 			}`,
-	// 			expected: `
-	// 			{
-	// 				"snapshot": {
-	// 					"id": "100",
-	// 					"name": "foo",
-	// 					"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
-	// 				}
-	// 			}`,
-	// 		}
-
-	// 		f.checkSuccess(t)
-	// 	})
-
-	// t.Run("with named fragment spread", func(t *testing.T) {
-	// 	f := &queryExecution2Fixture{
-	// 		services: []testService{serviceA, serviceB},
-	// 		query: `
-	// 		query Foo {
-	// 			snapshot(id: "foo") {
-	// 				id
-	// 				name
-	// 				... NamedFragment
-	// 			}
-	// 		}
-
-	// 		fragment NamedFragment on SnapshotImplementation {
-	// 			gizmos {
-	// 				id
-	// 				name
-	// 			}
-	// 		}`,
-	// 		expected: `
-	// 		{
-	// 			"snapshot": {
-	// 				"id": "100",
-	// 				"name": "foo",
-	// 				"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
-	// 			}
-	// 		}`,
-	// 	}
-
-	// 	f.checkSuccess(t)
-	// })
-
-	// t.Run("with nested fragment spread", func(t *testing.T) {
-	// 	f := &queryExecution2Fixture{
-	// 		services: []testService{serviceA, serviceB},
-	// 		query: `
-	// 		query Foo {
-	// 			snapshot(id: "foo") {
-	// 				... NamedFragment
-	// 			}
-	// 		}
-
-	// 		fragment NamedFragment on Snapshot {
-	// 			id
-	// 			name
-	// 			... on SnapshotImplementation {
-	// 				gizmos {
-	// 					id
-	// 					name
-	// 			  	}
-	// 			}
-	// 		}`,
-	// 		expected: `
-	// 		{
-	// 			"snapshot": {
-	// 				"id": "100",
-	// 				"name": "foo",
-	// 				"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
-	// 			}
-	// 		}`,
-	// 	}
-
-	// 	f.checkSuccess(t)
-	// })
+	f.checkSuccess(t)
 }
-
-// func TestQueryExecution(t *testing.T) {
-// 	t.Run("executes single service query plan", func(t *testing.T) {
-// 		f := PlanTestFixture2
-// 		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: f.Schema})
-// 		query := "{ gizmos { id name gadgets { id name gimmicks { id name } } } }"
-// 		operation := gqlparser.MustLoadQuery(schema, query)
-// 		require.Len(t, operation.Operations, 1, "bad test: query must be a single operation")
-// 		plan, err := Plan(&PlanningContext{operation.Operations[0], schema, f.Locations, f.IsBoundary, map[string]*Service{
-// 			"A": {Name: "A", ServiceURL: "A"},
-// 			"B": {Name: "B", ServiceURL: "B"},
-// 			"C": {Name: "C", ServiceURL: "C"},
-// 		}})
-// 		require.NoError(t, err)
-
-// 		serviceResponseJSON := `{
-// 			"gizmos": [
-// 				{
-// 					"id": "GIZMO1",
-// 					"name": "Gizmo #1",
-// 					"gadgets": [
-// 						{
-// 							"id": "GADGET1",
-// 							"name": "Gadget #1",
-// 							"gimmicks": [
-// 								{
-// 									"id": "GIMMICK1",
-// 									"name": "Gimmick #1"
-// 								}
-// 							]
-// 						}
-// 					]
-// 				}
-// 			]
-// 		}`
-
-// 		mockClient := &MockGraphQLClient{
-// 			mockJSONResponse: serviceResponseJSON,
-// 		}
-
-// 		mockClient.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-
-// 		queryExecution := newQueryExecution2(mockClient, schema, nil)
-
-// 		ctx := testContextWithoutVariables(operation.Operations[0])
-
-// 		result, err := queryExecution.Execute(ctx, *plan)
-// 		require.NoError(t, err)
-
-// 		require.Equal(t, []ExecutionResult{
-// 			{
-// 				ServiceURL: "A",
-// 				Data:       jsonToInterfaceMap(serviceResponseJSON),
-// 			},
-// 		}, result)
-
-// 	})
-// }
-
-// func TestQueryExecution2MultipleServices(t *testing.T) {
-// 	f := &queryExecution2Fixture{
-// 		services: []testService{
-// 			{
-// 				schema: `directive @boundary on OBJECT
-// 				type Movie @boundary {
-// 					id: ID!
-// 					title: String
-// 				}
-
-// 				type Query {
-// 					movie(id: ID!): Movie!
-// 				}`,
-// 				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 					w.Write([]byte(`{
-// 						"data": {
-// 							"movie": {
-// 								"id": "1",
-// 								"title": "Test title"
-// 							}
-// 						}
-// 					}
-// 					`))
-// 				}),
-// 			},
-// 			{
-// 				schema: `directive @boundary on OBJECT
-
-// 				type Movie @boundary {
-// 					id: ID!
-// 					release: Int
-// 				}
-
-// 				type Query {
-// 					movie(id: ID!): Movie! @boundary
-// 				}`,
-// 				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 					w.Write([]byte(`{
-// 						"data": {
-// 							"_0": {
-// 								"id": "1",
-// 								"release": 2007
-// 							}
-// 						}
-// 					}
-// 					`))
-// 				}),
-// 			},
-// 		},
-// 		query: `{
-// 			movie(id: "1") {
-// 				id
-// 				title
-// 				release
-// 			}
-// 		}`,
-// 		expected: `{
-// 			"movie": {
-// 				"id": "1",
-// 				"title": "Test title",
-// 				"release": 2007
-// 			}
-// 		}`,
-// 	}
-
-// 	f.checkSuccess(t)
-// }
 
 func TestExtractBoundaryIDs(t *testing.T) {
 	dataJSON := `{
@@ -1250,17 +1013,15 @@ func TestFormatResponseBody(t *testing.T) {
 
 		expectedJSON := `
 			{
-				"data" : {
-					"gizmos": [
-						{ "id": "GIZMO1", "color": "RED", "owner": { "id": "1", "name": "Owner1" } },
-						{ "id": "GIZMO2", "color": "BLUE", "owner": { "id": "2", "name": "Owner2" } },
-						{ "id": "GIZMO3", "color": "GREEN", "owner": { "id": "3", "name": "Owner3" } }
-					]
-				}
+				"gizmos": [
+					{ "id": "GIZMO1", "color": "RED", "owner": { "id": "1", "name": "Owner1" } },
+					{ "id": "GIZMO2", "color": "BLUE", "owner": { "id": "2", "name": "Owner2" } },
+					{ "id": "GIZMO3", "color": "GREEN", "owner": { "id": "3", "name": "Owner3" } }
+				]
 			}`
 
 		document := gqlparser.MustLoadQuery(schema, query)
-		bodyJSON, err := formatResponseBody(document.Operations[0].SelectionSet, result, nil)
+		bodyJSON, err := formatResponseBody(document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
 		require.JSONEq(t, expectedJSON, bodyJSON)
 	})
@@ -1308,25 +1069,15 @@ func TestFormatResponseBody(t *testing.T) {
 
 		expectedJSON := `
 			{
-				"data" : {
-					"gizmos": [
-						{ "id": "GIZMO1", "color": "RED", "owner": { "id": "1", "name": "Owner1" } },
-						{ "id": "GIZMO2", "color": "BLUE", "owner": { "id": "2", "name": "Owner2" } },
-						{ "id": "GIZMO3", "color": "GREEN", "owner": { "id": "3", "name": "Owner3" } }
-					]
-				},
-				"errors": [
-					{
-						"message": "field failed to resolve",
-						"path": ["gizmos", 2, "color"],
-						"extensions": null
-					}
+				"gizmos": [
+					{ "id": "GIZMO1", "color": "RED", "owner": { "id": "1", "name": "Owner1" } },
+					{ "id": "GIZMO2", "color": "BLUE", "owner": { "id": "2", "name": "Owner2" } },
+					{ "id": "GIZMO3", "color": "GREEN", "owner": { "id": "3", "name": "Owner3" } }
 				]
 			}`
 
 		document := gqlparser.MustLoadQuery(schema, query)
-		errs := GraphqlErrors([]GraphqlError{{Message: "field failed to resolve", Path: ast.Path{ast.PathName("gizmos"), ast.PathIndex(2), ast.PathName("color")}, Extensions: nil}})
-		bodyJSON, err := formatResponseBody(document.Operations[0].SelectionSet, result, errs)
+		bodyJSON, err := formatResponseBody(document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
 		require.JSONEq(t, expectedJSON, bodyJSON)
 	})

@@ -537,23 +537,8 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 	return
 }
 
-func formatResponseBody(selectionSet ast.SelectionSet, result map[string]interface{}, errs GraphqlErrors) (string, error) {
-	var buf bytes.Buffer
-	dataJSON, err := formatResponseDataRec(selectionSet, result)
-	if err != nil {
-		return "", err
-	}
-	buf.WriteString(fmt.Sprintf(`{"data":%s`, dataJSON))
-
-	if len(errs) > 0 {
-		errsJSON, err := json.Marshal(errs)
-		if err != nil {
-			return "", err
-		}
-		buf.WriteString(fmt.Sprintf(`,"errors":%s`, errsJSON))
-	}
-	buf.WriteString("}")
-	return buf.String(), nil
+func formatResponseBody(selectionSet ast.SelectionSet, result map[string]interface{}) (string, error) {
+	return formatResponseDataRec(selectionSet, result)
 }
 
 func formatResponseDataRec(selectionSet ast.SelectionSet, result interface{}) (string, error) {
