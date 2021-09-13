@@ -3,85 +3,296 @@ package bramble
 import (
 	"context"
 	"encoding/json"
+	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
-type MockGraphQLClient struct {
-	mock.Mock
-	mockJSONResponse string
+func TestExecution2FederatedQueryFragmentSpreads(t *testing.T) {
+	// 	serviceA := testService{
+	// 		schema: `
+	// 		directive @boundary on OBJECT
+	// 		interface Snapshot {
+	// 			id: ID!
+	// 			name: String!
+	// 		}
+
+	// 		type Gizmo @boundary {
+	// 			id: ID!
+	// 		}
+
+	// 		type SnapshotImplementation implements Snapshot {
+	// 			id: ID!
+	// 			name: String!
+	// 			gizmos: [Gizmo!]!
+	// 		}
+
+	// 		type Query {
+	// 			snapshot(id: ID!): Snapshot!
+	// 		}`,
+	// 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// 			w.Write([]byte(`
+	// 			{
+	// 				"data": {
+	// 					"snapshot": {
+	// 						"id": "100",
+	// 						"name": "foo",
+	// 						"gizmos": [{ "id": "1" }]
+	// 					}
+	// 				}
+	// 			}`))
+	// 		}),
+	// 	}
+
+	// 	serviceB := testService{
+	// 		schema: `
+	// 		directive @boundary on OBJECT
+	// 		type Gizmo @boundary {
+	// 			id: ID!
+	// 			name: String!
+	// 		}
+
+	// 		type Query {
+	// 			gizmo(id: ID!): Gizmo @boundary
+	// 		}`,
+	// 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// 			w.Write([]byte(`
+	// 			{
+	// 				"data": {
+	// 					"_0": {
+	// 						"_id": "1",
+	// 						"name": "Gizmo #1"
+	// 					}
+	// 				}
+	// 			}`))
+	// 		}),
+	// 	}
+
+	// 	t.Run("with inline fragment spread", func(t *testing.T) {
+	// 		f := &queryExecution2Fixture{
+	// 			services: []testService{serviceA, serviceB},
+	// 			query: `
+	// 			query Foo {
+	// 				snapshot(id: "foo") {
+	// 					id
+	// 					name
+	// 					... on SnapshotImplementation {
+	// 						gizmos {
+	// 							id
+	// 							name
+	// 						}
+	// 					}
+	// 				}
+	// 			}`,
+	// 			expected: `
+	// 			{
+	// 				"snapshot": {
+	// 					"id": "100",
+	// 					"name": "foo",
+	// 					"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
+	// 				}
+	// 			}`,
+	// 		}
+
+	// 		f.checkSuccess(t)
+	// 	})
+
+	// t.Run("with named fragment spread", func(t *testing.T) {
+	// 	f := &queryExecution2Fixture{
+	// 		services: []testService{serviceA, serviceB},
+	// 		query: `
+	// 		query Foo {
+	// 			snapshot(id: "foo") {
+	// 				id
+	// 				name
+	// 				... NamedFragment
+	// 			}
+	// 		}
+
+	// 		fragment NamedFragment on SnapshotImplementation {
+	// 			gizmos {
+	// 				id
+	// 				name
+	// 			}
+	// 		}`,
+	// 		expected: `
+	// 		{
+	// 			"snapshot": {
+	// 				"id": "100",
+	// 				"name": "foo",
+	// 				"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
+	// 			}
+	// 		}`,
+	// 	}
+
+	// 	f.checkSuccess(t)
+	// })
+
+	// t.Run("with nested fragment spread", func(t *testing.T) {
+	// 	f := &queryExecution2Fixture{
+	// 		services: []testService{serviceA, serviceB},
+	// 		query: `
+	// 		query Foo {
+	// 			snapshot(id: "foo") {
+	// 				... NamedFragment
+	// 			}
+	// 		}
+
+	// 		fragment NamedFragment on Snapshot {
+	// 			id
+	// 			name
+	// 			... on SnapshotImplementation {
+	// 				gizmos {
+	// 					id
+	// 					name
+	// 			  	}
+	// 			}
+	// 		}`,
+	// 		expected: `
+	// 		{
+	// 			"snapshot": {
+	// 				"id": "100",
+	// 				"name": "foo",
+	// 				"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
+	// 			}
+	// 		}`,
+	// 	}
+
+	// 	f.checkSuccess(t)
+	// })
 }
 
-func (m *MockGraphQLClient) Request(ctx context.Context, url string, request *Request, out interface{}) error {
-	args := m.Called(ctx, url, request, out)
-	err := json.Unmarshal([]byte(m.mockJSONResponse), &out)
-	if err != nil {
-		return err
-	}
-	return args.Error(0)
-}
+// func TestQueryExecution(t *testing.T) {
+// 	t.Run("executes single service query plan", func(t *testing.T) {
+// 		f := PlanTestFixture2
+// 		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: f.Schema})
+// 		query := "{ gizmos { id name gadgets { id name gimmicks { id name } } } }"
+// 		operation := gqlparser.MustLoadQuery(schema, query)
+// 		require.Len(t, operation.Operations, 1, "bad test: query must be a single operation")
+// 		plan, err := Plan(&PlanningContext{operation.Operations[0], schema, f.Locations, f.IsBoundary, map[string]*Service{
+// 			"A": {Name: "A", ServiceURL: "A"},
+// 			"B": {Name: "B", ServiceURL: "B"},
+// 			"C": {Name: "C", ServiceURL: "C"},
+// 		}})
+// 		require.NoError(t, err)
 
-func TestQueryExecution(t *testing.T) {
-	t.Run("executes single service query plan", func(t *testing.T) {
-		f := PlanTestFixture2
-		schema := gqlparser.MustLoadSchema(&ast.Source{Name: "fixture", Input: f.Schema})
-		query := "{ gizmos { id name gadgets { id name gimmicks { id name } } } }"
-		operation := gqlparser.MustLoadQuery(schema, query)
-		require.Len(t, operation.Operations, 1, "bad test: query must be a single operation")
-		plan, err := Plan(&PlanningContext{operation.Operations[0], schema, f.Locations, f.IsBoundary, map[string]*Service{
-			"A": {Name: "A", ServiceURL: "A"},
-			"B": {Name: "B", ServiceURL: "B"},
-			"C": {Name: "C", ServiceURL: "C"},
-		}})
-		require.NoError(t, err)
+// 		serviceResponseJSON := `{
+// 			"gizmos": [
+// 				{
+// 					"id": "GIZMO1",
+// 					"name": "Gizmo #1",
+// 					"gadgets": [
+// 						{
+// 							"id": "GADGET1",
+// 							"name": "Gadget #1",
+// 							"gimmicks": [
+// 								{
+// 									"id": "GIMMICK1",
+// 									"name": "Gimmick #1"
+// 								}
+// 							]
+// 						}
+// 					]
+// 				}
+// 			]
+// 		}`
 
-		serviceResponseJSON := `{
-			"gizmos": [
-				{
-					"id": "GIZMO1",
-					"name": "Gizmo #1",
-					"gadgets": [
-						{
-							"id": "GADGET1",
-							"name": "Gadget #1",
-							"gimmicks": [
-								{
-									"id": "GIMMICK1",
-									"name": "Gimmick #1"
-								}
-							]
-						}
-					]
-				}
-			]
-		}`
+// 		mockClient := &MockGraphQLClient{
+// 			mockJSONResponse: serviceResponseJSON,
+// 		}
 
-		mockClient := &MockGraphQLClient{
-			mockJSONResponse: serviceResponseJSON,
-		}
+// 		mockClient.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		mockClient.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+// 		queryExecution := newQueryExecution2(mockClient, schema, nil)
 
-		queryExecution := newQueryExecution2(mockClient, schema, nil)
+// 		ctx := testContextWithoutVariables(operation.Operations[0])
 
-		ctx := testContextWithoutVariables(operation.Operations[0])
+// 		result, err := queryExecution.Execute(ctx, *plan)
+// 		require.NoError(t, err)
 
-		result, err := queryExecution.Execute(ctx, *plan)
-		require.NoError(t, err)
+// 		require.Equal(t, []ExecutionResult{
+// 			{
+// 				ServiceURL: "A",
+// 				Data:       jsonToInterfaceMap(serviceResponseJSON),
+// 			},
+// 		}, result)
 
-		require.Equal(t, []ExecutionResult{
-			{
-				ServiceURL: "A",
-				Data:       jsonToInterfaceMap(serviceResponseJSON),
-			},
-		}, result)
+// 	})
+// }
 
-	})
-}
+// func TestQueryExecution2MultipleServices(t *testing.T) {
+// 	f := &queryExecution2Fixture{
+// 		services: []testService{
+// 			{
+// 				schema: `directive @boundary on OBJECT
+// 				type Movie @boundary {
+// 					id: ID!
+// 					title: String
+// 				}
+
+// 				type Query {
+// 					movie(id: ID!): Movie!
+// 				}`,
+// 				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 					w.Write([]byte(`{
+// 						"data": {
+// 							"movie": {
+// 								"id": "1",
+// 								"title": "Test title"
+// 							}
+// 						}
+// 					}
+// 					`))
+// 				}),
+// 			},
+// 			{
+// 				schema: `directive @boundary on OBJECT
+
+// 				type Movie @boundary {
+// 					id: ID!
+// 					release: Int
+// 				}
+
+// 				type Query {
+// 					movie(id: ID!): Movie! @boundary
+// 				}`,
+// 				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 					w.Write([]byte(`{
+// 						"data": {
+// 							"_0": {
+// 								"id": "1",
+// 								"release": 2007
+// 							}
+// 						}
+// 					}
+// 					`))
+// 				}),
+// 			},
+// 		},
+// 		query: `{
+// 			movie(id: "1") {
+// 				id
+// 				title
+// 				release
+// 			}
+// 		}`,
+// 		expected: `{
+// 			"movie": {
+// 				"id": "1",
+// 				"title": "Test title",
+// 				"release": 2007
+// 			}
+// 		}`,
+// 	}
+
+// 	f.checkSuccess(t)
+// }
 
 func TestExtractBoundaryIDs(t *testing.T) {
 	dataJSON := `{
@@ -1119,6 +1330,72 @@ func TestFormatResponseBody(t *testing.T) {
 		require.NoError(t, err)
 		require.JSONEq(t, expectedJSON, bodyJSON)
 	})
+}
+
+type queryExecution2Fixture struct {
+	services  []testService
+	variables map[string]interface{}
+	query     string
+	expected  string
+	resp      *graphql.Response
+	debug     *DebugInfo
+	errors    gqlerror.List
+}
+
+func (f *queryExecution2Fixture) checkSuccess(t *testing.T) {
+	f.run(t)
+
+	assert.Empty(t, f.resp.Errors)
+	jsonEqWithOrder(t, f.expected, string(f.resp.Data))
+}
+
+func (f *queryExecution2Fixture) run(t *testing.T) {
+	var services []*Service
+	var schemas []*ast.Schema
+
+	for _, s := range f.services {
+		serv := httptest.NewServer(s.handler)
+		defer serv.Close()
+
+		schema := gqlparser.MustLoadSchema(&ast.Source{Input: s.schema})
+		services = append(services, &Service{
+			ServiceURL: serv.URL,
+			Schema:     schema,
+		})
+
+		schemas = append(schemas, schema)
+	}
+
+	merged, err := MergeSchemas(schemas...)
+	require.NoError(t, err)
+
+	es := newExecutableSchema(nil, 50, nil, services...)
+	es.MergedSchema = merged
+	es.BoundaryQueries = buildBoundaryQueriesMap(services...)
+	es.Locations = buildFieldURLMap(services...)
+	es.IsBoundary = buildIsBoundaryMap(services...)
+	query := gqlparser.MustLoadQuery(merged, f.query)
+	vars := f.variables
+	if vars == nil {
+		vars = map[string]interface{}{}
+	}
+	ctx := testContextWithVariables(vars, query.Operations[0])
+	if f.debug != nil {
+		ctx = context.WithValue(ctx, DebugKey, *f.debug)
+	}
+	f.resp = es.NewPipelineExecuteQuery(ctx)
+	f.resp.Extensions = graphql.GetExtensions(ctx)
+
+	if len(f.errors) == 0 {
+		assert.Empty(t, f.resp.Errors)
+		jsonEqWithOrder(t, f.expected, string(f.resp.Data))
+	} else {
+		require.Equal(t, len(f.errors), len(f.resp.Errors))
+		for i := range f.errors {
+			delete(f.resp.Errors[i].Extensions, "serviceUrl")
+			assert.Equal(t, *f.errors[i], *f.resp.Errors[i])
+		}
+	}
 }
 
 func jsonToInterfaceMap(jsonString string) map[string]interface{} {

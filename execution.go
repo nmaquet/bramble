@@ -245,6 +245,127 @@ func (s *ExecutableSchema) ExecuteQuery(ctx context.Context) *graphql.Response {
 
 }
 
+func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql.Response {
+	start := time.Now()
+
+	opctx := graphql.GetOperationContext(ctx)
+	op := opctx.Operation
+
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	result := make(map[string]interface{})
+
+	variables := map[string]interface{}{}
+	if graphql.HasOperationContext(ctx) {
+		reqctx := graphql.GetOperationContext(ctx)
+		if reqctx != nil {
+			variables = reqctx.Variables
+		}
+	}
+
+	// The op passed in is a cached value
+	// so it must be copied before modification
+	op = s.evaluateSkipAndInclude(variables, op)
+
+	var errs gqlerror.List
+	perms, hasPerms := GetPermissionsFromContext(ctx)
+	if hasPerms {
+		errs = perms.FilterAuthorizedFields(op)
+	}
+
+	filteredSchema := s.MergedSchema
+	if hasPerms {
+		filteredSchema = perms.FilterSchema(s.MergedSchema)
+	}
+	for _, f := range selectionSetToFields(op.SelectionSet) {
+		switch f.Name {
+		case "__type":
+			name := f.Arguments.ForName("name").Value.Raw
+			result[f.Alias] = s.resolveType(ctx, filteredSchema, &ast.Type{NamedType: name}, f.SelectionSet)
+		case "__schema":
+			result[f.Alias] = s.resolveSchema(ctx, filteredSchema, f.SelectionSet)
+		}
+	}
+
+	plan, err := Plan(&PlanningContext{
+		Operation:  op,
+		Schema:     s.Schema(),
+		Locations:  s.Locations,
+		IsBoundary: s.IsBoundary,
+		Services:   s.Services,
+	})
+
+	if err != nil {
+		return graphql.ErrorResponse(ctx, err.Error())
+	}
+
+	AddField(ctx, "operation.name", op.Name)
+	AddField(ctx, "operation.type", op.Operation)
+
+	qe := newQueryExecution2(s.GraphqlClient, s.Schema(), s.BoundaryQueries)
+	// FIXME: extract actual errors
+	results, _ := qe.Execute(ctx, *plan)
+	extensions := make(map[string]interface{})
+	if debugInfo, ok := ctx.Value(DebugKey).(DebugInfo); ok {
+		if debugInfo.Query {
+			extensions["query"] = op
+		}
+		if debugInfo.Variables {
+			extensions["variables"] = variables
+		}
+		if debugInfo.Plan {
+			extensions["plan"] = plan
+		}
+		if debugInfo.Timing {
+			extensions["timing"] = time.Since(start).Round(time.Millisecond).String()
+		}
+		if debugInfo.TraceID {
+			extensions["traceid"] = TraceIDFromContext(ctx)
+		}
+	}
+
+	// FIXME: deal with the fact qe is a different type
+	// for _, plugin := range s.plugins {
+	// 	// if err := plugin.ModifyExtensions(ctx, qe, extensions); err != nil {
+	// 	// 	AddField(ctx, fmt.Sprintf("%s-plugin-error", plugin.ID()), err.Error())
+	// 	// }
+	// }
+
+	for name, value := range extensions {
+		graphql.RegisterExtension(ctx, name, value)
+	}
+
+	mergedResult, err := mergeExecutionResults(results)
+	if err != nil {
+		errs = append(errs, &gqlerror.Error{Message: err.Error()})
+		AddField(ctx, "errors", errs)
+		return &graphql.Response{
+			Errors: errs,
+		}
+	}
+
+	// FIXME: pass in actual errors
+	formattedResponse, err := formatResponseBody(op.SelectionSet, mergedResult, nil)
+	if err != nil {
+		errs = append(errs, &gqlerror.Error{Message: err.Error()})
+		AddField(ctx, "errors", errs)
+		return &graphql.Response{
+			Errors: errs,
+		}
+	}
+
+	if len(errs) > 0 {
+		AddField(ctx, "errors", errs)
+	}
+
+	return &graphql.Response{
+		Data:   []byte(formattedResponse),
+		Errors: errs,
+	}
+
+}
+
 // TraceIDFromContext retrieves the trace ID from the context if it exists.
 // Returns an empty string otherwise.
 func TraceIDFromContext(ctx context.Context) string {

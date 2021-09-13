@@ -36,7 +36,7 @@ func newQueryExecution2(client GraphQLClientInterface, schema *ast.Schema, bound
 	}
 }
 
-func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]ExecutionResult, error) {
+func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]ExecutionResult, []*gqlerror.List) {
 	stepWg := &sync.WaitGroup{}
 	readWg := &sync.WaitGroup{}
 	resultsChan := make(chan ExecutionResult)
@@ -45,7 +45,7 @@ func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]E
 		if step.ServiceURL == internalServiceName {
 			r, err := ExecuteBrambleStep(step)
 			if err != nil {
-				return nil, err
+				return nil, []*gqlerror.List{}
 			}
 			results = append(results, *r)
 		}
@@ -85,7 +85,9 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 		// FIXME: error handling with channels
 		panic(err)
 	}
+
 	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
+
 	for _, childStep := range step.Then {
 		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint)
 		if err != nil {
