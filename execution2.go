@@ -130,7 +130,7 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 	}
 	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
 	for _, childStep := range step.Then {
-		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint)
+		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint) // FIXME: this is not correct
 		if err != nil {
 			// FIXME: error handling with channels
 			panic(err)

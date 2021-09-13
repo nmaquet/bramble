@@ -3,8 +3,10 @@ package bramble
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/99designs/gqlgen/graphql"
@@ -57,103 +59,103 @@ func TestQueryExecution2WithSingleService(t *testing.T) {
 	f.checkSuccess(t)
 }
 
-// func TestQueryWithArrayBoundaryFieldsAndMultipleChildrenSteps2(t *testing.T) {
-// 	f := &queryExecution2Fixture{
-// 		services: []testService{
-// 			{
-// 				schema: `directive @boundary on OBJECT | FIELD_DEFINITION
+func TestQueryWithArrayBoundaryFieldsAndMultipleChildrenSteps2(t *testing.T) {
+	f := &queryExecution2Fixture{
+		services: []testService{
+			{
+				schema: `directive @boundary on OBJECT | FIELD_DEFINITION
 
-// 				type Movie @boundary {
-// 					id: ID!
-// 					title: String
-// 				}
+				type Movie @boundary {
+					id: ID!
+					title: String
+				}
 
-// 				type Query {
-// 					randomMovie: Movie!
-// 					movies(ids: [ID!]!): [Movie]! @boundary
-// 				}`,
-// 				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 					b, _ := io.ReadAll(r.Body)
-// 					if strings.Contains(string(b), "randomMovie") {
-// 						w.Write([]byte(`{
-// 						"data": {
-// 							"randomMovie": {
-// 									"id": "1",
-// 									"title": "Movie 1"
-// 							}
-// 						}
-// 					}
-// 					`))
-// 					} else {
-// 						w.Write([]byte(`{
-// 						"data": {
-// 							"_result": [
-// 								{ "id": 2, "title": "Movie 2" },
-// 								{ "id": 3, "title": "Movie 3" },
-// 								{ "id": 4, "title": "Movie 4" }
-// 							]
-// 						}
-// 					}
-// 					`))
-// 					}
-// 				}),
-// 			},
-// 			{
-// 				schema: `directive @boundary on OBJECT | FIELD_DEFINITION
+				type Query {
+					randomMovie: Movie!
+					movies(ids: [ID!]!): [Movie]! @boundary
+				}`,
+				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					b, _ := io.ReadAll(r.Body)
+					if strings.Contains(string(b), "randomMovie") {
+						w.Write([]byte(`{
+						"data": {
+							"randomMovie": {
+									"id": "1",
+									"title": "Movie 1"
+							}
+						}
+					}
+					`))
+					} else {
+						w.Write([]byte(`{
+						"data": {
+							"_result": [
+								{ "id": 2, "title": "Movie 2" },
+								{ "id": 3, "title": "Movie 3" },
+								{ "id": 4, "title": "Movie 4" }
+							]
+						}
+					}
+					`))
+					}
+				}),
+			},
+			{
+				schema: `directive @boundary on OBJECT | FIELD_DEFINITION
 
-// 				type Movie @boundary {
-// 					id: ID!
-// 					compTitles: [Movie!]!
-// 				}
+				type Movie @boundary {
+					id: ID!
+					compTitles: [Movie!]!
+				}
 
-// 				type Query {
-// 					movies(ids: [ID!]): [Movie]! @boundary
-// 				}`,
-// 				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 					w.Write([]byte(`{
-// 						"data": {
-// 							"_result": [
-// 								{
-// 									"_id": "1",
-// 									"compTitles": [
-// 										{"id": "2"},
-// 										{"id": "3"},
-// 										{"id": "4"}
-// 									]
-// 								}
-// 							]
-// 						}
-// 					}
-// 					`))
-// 				}),
-// 			},
-// 		},
-// 		query: `{
-// 			randomMovie {
-// 				id
-// 				title
-// 				compTitles {
-// 					id
-// 					title
-// 				}
-// 			}
-// 		}`,
-// 		expected: `{
-// 			"randomMovie":
-// 				{
-// 					"id": "1",
-// 					"title": "Movie 1",
-// 					"compTitles": [
-// 						{ "id": 2, "title": "Movie 2" },
-// 						{ "id": 3, "title": "Movie 3" },
-// 						{ "id": 4, "title": "Movie 4" }
-// 					]
-// 				}
-// 		}`,
-// 	}
+				type Query {
+					movies(ids: [ID!]): [Movie]! @boundary
+				}`,
+				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte(`{
+						"data": {
+							"_result": [
+								{
+									"_id": "1",
+									"compTitles": [
+										{"id": "2"},
+										{"id": "3"},
+										{"id": "4"}
+									]
+								}
+							]
+						}
+					}
+					`))
+				}),
+			},
+		},
+		query: `{
+			randomMovie {
+				id
+				title
+				compTitles {
+					id
+					title
+				}
+			}
+		}`,
+		expected: `{
+			"randomMovie":
+				{
+					"id": "1",
+					"title": "Movie 1",
+					"compTitles": [
+						{ "id": 2, "title": "Movie 2" },
+						{ "id": 3, "title": "Movie 3" },
+						{ "id": 4, "title": "Movie 4" }
+					]
+				}
+		}`,
+	}
 
-// 	f.checkSuccess(t)
-// }
+	f.checkSuccess(t)
+}
 
 func TestExtractBoundaryIDs(t *testing.T) {
 	dataJSON := `{
