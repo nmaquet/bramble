@@ -57,6 +57,104 @@ func TestQueryExecution2WithSingleService(t *testing.T) {
 	f.checkSuccess(t)
 }
 
+// func TestQueryWithArrayBoundaryFieldsAndMultipleChildrenSteps2(t *testing.T) {
+// 	f := &queryExecution2Fixture{
+// 		services: []testService{
+// 			{
+// 				schema: `directive @boundary on OBJECT | FIELD_DEFINITION
+
+// 				type Movie @boundary {
+// 					id: ID!
+// 					title: String
+// 				}
+
+// 				type Query {
+// 					randomMovie: Movie!
+// 					movies(ids: [ID!]!): [Movie]! @boundary
+// 				}`,
+// 				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 					b, _ := io.ReadAll(r.Body)
+// 					if strings.Contains(string(b), "randomMovie") {
+// 						w.Write([]byte(`{
+// 						"data": {
+// 							"randomMovie": {
+// 									"id": "1",
+// 									"title": "Movie 1"
+// 							}
+// 						}
+// 					}
+// 					`))
+// 					} else {
+// 						w.Write([]byte(`{
+// 						"data": {
+// 							"_result": [
+// 								{ "id": 2, "title": "Movie 2" },
+// 								{ "id": 3, "title": "Movie 3" },
+// 								{ "id": 4, "title": "Movie 4" }
+// 							]
+// 						}
+// 					}
+// 					`))
+// 					}
+// 				}),
+// 			},
+// 			{
+// 				schema: `directive @boundary on OBJECT | FIELD_DEFINITION
+
+// 				type Movie @boundary {
+// 					id: ID!
+// 					compTitles: [Movie!]!
+// 				}
+
+// 				type Query {
+// 					movies(ids: [ID!]): [Movie]! @boundary
+// 				}`,
+// 				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 					w.Write([]byte(`{
+// 						"data": {
+// 							"_result": [
+// 								{
+// 									"_id": "1",
+// 									"compTitles": [
+// 										{"id": "2"},
+// 										{"id": "3"},
+// 										{"id": "4"}
+// 									]
+// 								}
+// 							]
+// 						}
+// 					}
+// 					`))
+// 				}),
+// 			},
+// 		},
+// 		query: `{
+// 			randomMovie {
+// 				id
+// 				title
+// 				compTitles {
+// 					id
+// 					title
+// 				}
+// 			}
+// 		}`,
+// 		expected: `{
+// 			"randomMovie":
+// 				{
+// 					"id": "1",
+// 					"title": "Movie 1",
+// 					"compTitles": [
+// 						{ "id": 2, "title": "Movie 2" },
+// 						{ "id": 3, "title": "Movie 3" },
+// 						{ "id": 4, "title": "Movie 4" }
+// 					]
+// 				}
+// 		}`,
+// 	}
+
+// 	f.checkSuccess(t)
+// }
+
 func TestExtractBoundaryIDs(t *testing.T) {
 	dataJSON := `{
 		"gizmos": [
@@ -71,7 +169,7 @@ func TestExtractBoundaryIDs(t *testing.T) {
 				"id": "2",
 				"name": "Gizmo 2",
 				"owner": {
-					"_id": "1"
+					"id": "1"
 				}
 			},
 			{
@@ -80,11 +178,18 @@ func TestExtractBoundaryIDs(t *testing.T) {
 				"owner": {
 					"_id": "2"
 				}
+			},
+			{
+				"id": "4",
+				"name": "Gizmo 4",
+				"owner": {
+					"id": "5"
+				}
 			}
 		]
 	}`
 	data := map[string]interface{}{}
-	expected := []string{"1", "1", "2"}
+	expected := []string{"1", "1", "2", "5"}
 	insertionPoint := []string{"gizmos", "owner"}
 	require.NoError(t, json.Unmarshal([]byte(dataJSON), &data))
 	result, err := extractBoundaryIDs(data, insertionPoint)
