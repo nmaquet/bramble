@@ -201,7 +201,7 @@ func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, er
 				id, ok = ptr["id"].(string)
 			}
 			if !ok {
-				return nil, errors.New("extractBoundaryIDs: unexpected missing '_id' in map")
+				return nil, errors.New("extractBoundaryIDs: unexpected missing '_id' or 'id' in map")
 			}
 			return []string{id}, nil
 		case []interface{}:
@@ -329,7 +329,7 @@ func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, inser
 			}
 		case []interface{}:
 			for _, dstValue := range ptr {
-				dstID, err := valueAtJSONPath(dstValue, insertionPoint[0], "_id")
+				dstID, err := idAtJSONPath(dstValue, insertionPoint[0])
 				if err != nil {
 					return err
 				}
@@ -338,7 +338,7 @@ func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, inser
 					return err
 				}
 				for _, srcValue := range srcValues {
-					srcID, err := valueAtJSONPath(srcValue, "_id")
+					srcID, err := idAtJSONPath(srcValue)
 					if err != nil {
 						return err
 					}
@@ -348,6 +348,9 @@ func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, inser
 							return err
 						}
 						for k, v := range srcMap {
+							if k == "_id" || k == "id" {
+								continue
+							}
 							dstMap, err := mapAtJSONPath(dstValue, insertionPoint[0])
 							if err != nil {
 								return err
@@ -390,6 +393,26 @@ func mapAtJSONPath(value interface{}, path ...string) (map[string]interface{}, e
 		return nil, fmt.Errorf("mapAtJSONPath: expected value to be a 'map[string]interface{}' but got '%T'", result)
 	}
 	return resultMap, nil
+}
+
+func idAtJSONPath(val interface{}, path ...string) (string, error) {
+	valueAtPath, err := valueAtJSONPath(val, path...)
+	if err != nil {
+		return "", err
+	}
+	mapAtPath, ok := valueAtPath.(map[string]interface{})
+	if !ok {
+		return "", errors.New("idAtJSONPath: value at path is not a map")
+	}
+	id, ok := mapAtPath["_id"].(string)
+	if ok {
+		return id, nil
+	}
+	id, ok = mapAtPath["id"].(string)
+	if ok {
+		return id, nil
+	}
+	return "", errors.New("idAtJSONPath: 'id' or '_id' not found")
 }
 
 func valueAtJSONPath(val interface{}, path ...string) (interface{}, error) {
