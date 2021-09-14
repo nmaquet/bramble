@@ -129,7 +129,7 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
 
 	for _, childStep := range step.Then {
-		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint) // FIXME: this is not correct
+		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint[1:])
 		if err == errNilBoundaryData {
 			continue
 		}
@@ -352,99 +352,70 @@ func mergeExecutionResults(results []ExecutionResult) (map[string]interface{}, e
 }
 
 func mergeExecutionResultsRec(src interface{}, dst interface{}, insertionPoint []string) error {
-	// base case for root steps (insertion point is always empty for root steps)
+	// base case
 	if len(insertionPoint) == 0 {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
-			for k, v := range src.(map[string]interface{}) {
-				ptr[k] = v
+			switch src := src.(type) {
+			// base case for root step merging
+			case map[string]interface{}:
+				for k, v := range src {
+					ptr[k] = v
+				}
+
+			// base case for children step merging
+			case []interface{}:
+				boundaryResults, err := getBoundaryFieldResults(src)
+				if err != nil {
+					return err
+				}
+
+				dstID, err := idAtJSONPath(ptr)
+				if err != nil {
+					return err
+				}
+
+				for _, result := range boundaryResults {
+					srcID, err := idAtJSONPath(result)
+					if err != nil {
+						return err
+					}
+					if srcID == dstID {
+						for k, v := range result {
+							if k == "_id" || k == "id" {
+								continue
+							}
+
+							ptr[k] = v
+						}
+					}
+				}
+
 			}
 		default:
 			return fmt.Errorf("mergeExecutionResultsRec: unxpected type '%T' for top-level merge", ptr)
 		}
 		return nil
 	}
-	// base case for child steps (insertion point is never empty for child steps)
-	if len(insertionPoint) == 1 {
-		switch ptr := dst.(type) {
-		case map[string]interface{}:
-			ptr, err := mapAtJSONPath(ptr, insertionPoint[0])
-			if err != nil {
-				return err
-			}
 
-			boundaryResults, err := getBoundaryFieldResults(src)
-			if err != nil {
-				return err
-			}
-
-			dstID, err := idAtJSONPath(ptr)
-			if err != nil {
-				return err
-			}
-
-			for _, result := range boundaryResults {
-				srcID, err := idAtJSONPath(result)
-				if err != nil {
-					return err
-				}
-				if srcID == dstID {
-					for k, v := range result {
-						if k == "_id" || k == "id" {
-							continue
-						}
-
-						ptr[k] = v
-					}
-				}
-			}
-		case []interface{}:
-			for _, dstValue := range ptr {
-				dstID, err := idAtJSONPath(dstValue, insertionPoint[0])
-				if err != nil {
-					return err
-				}
-				srcValues, err := getBoundaryFieldResults(src)
-				if err != nil {
-					return err
-				}
-				for _, srcValue := range srcValues {
-					srcID, err := idAtJSONPath(srcValue)
-					if err != nil {
-						return err
-					}
-					if srcID == dstID {
-						srcMap, err := mapAtJSONPath(srcValue)
-						if err != nil {
-							return err
-						}
-						for k, v := range srcMap {
-							if k == "_id" || k == "id" {
-								continue
-							}
-							dstMap, err := mapAtJSONPath(dstValue, insertionPoint[0])
-							if err != nil {
-								return err
-							}
-							dstMap[k] = v
-						}
-					}
-				}
-			}
-		default:
-			return fmt.Errorf("mergeExecutionResultsRec: unxpected type '%T' for non top-level merge", ptr)
-		}
-		return nil
-	}
 	// recursive case
 	switch ptr := dst.(type) {
 	case map[string]interface{}:
-		if err := mergeExecutionResultsRec(src, ptr[insertionPoint[0]], insertionPoint[1:]); err != nil {
-			return err
+		switch ptr := ptr[insertionPoint[0]].(type) {
+		case []interface{}:
+			for _, innerPtr := range ptr {
+				if err := mergeExecutionResultsRec(src, innerPtr, insertionPoint[1:]); err != nil {
+					return err
+				}
+			}
+		default:
+			if err := mergeExecutionResultsRec(src, ptr, insertionPoint[1:]); err != nil {
+				return err
+			}
 		}
 	case []interface{}:
 		for _, innerPtr := range ptr {
-			if err := mergeExecutionResultsRec(src, innerPtr, insertionPoint); err != nil {
+			if err := mergeExecutionResultsRec(src, innerPtr, insertionPoint[1:]); err != nil {
 				return err
 			}
 		}

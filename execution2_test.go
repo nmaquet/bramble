@@ -179,7 +179,7 @@ func TestQueryExecution2WithSingleService(t *testing.T) {
 	f.checkSuccess(t)
 }
 
-func SkipTestQueryWithArrayBoundaryFieldsAndMultipleChildrenSteps2(t *testing.T) {
+func TestQueryWithArrayBoundaryFieldsAndMultipleChildrenSteps2(t *testing.T) {
 	f := &queryExecution2Fixture{
 		services: []testService{
 			{
@@ -210,9 +210,9 @@ func SkipTestQueryWithArrayBoundaryFieldsAndMultipleChildrenSteps2(t *testing.T)
 						w.Write([]byte(`{
 						"data": {
 							"_result": [
-								{ "id": 2, "title": "Movie 2" },
-								{ "id": 3, "title": "Movie 3" },
-								{ "id": 4, "title": "Movie 4" }
+								{ "id": "2", "title": "Movie 2" },
+								{ "id": "3", "title": "Movie 3" },
+								{ "id": "4", "title": "Movie 4" }
 							]
 						}
 					}
@@ -266,9 +266,9 @@ func SkipTestQueryWithArrayBoundaryFieldsAndMultipleChildrenSteps2(t *testing.T)
 					"id": "1",
 					"title": "Movie 1",
 					"compTitles": [
-						{ "id": 2, "title": "Movie 2" },
-						{ "id": 3, "title": "Movie 3" },
-						{ "id": 4, "title": "Movie 4" }
+						{ "id": "2", "title": "Movie 2" },
+						{ "id": "3", "title": "Movie 3" },
+						{ "id": "4", "title": "Movie 4" }
 					]
 				}
 		}`,
