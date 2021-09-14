@@ -19,6 +19,12 @@ var (
 	errNullBubbledToRoot = errors.New("bubbleUpNullValuesInPlace: null bubbled up to root")
 )
 
+type ExecutionResult struct {
+	ServiceURL     string
+	InsertionPoint []string
+	Data           interface{}
+}
+
 type QueryExecution2 struct {
 	Schema       *ast.Schema
 	Errors       []*gqlerror.Error
@@ -129,7 +135,7 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
 
 	for _, childStep := range step.Then {
-		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint[1:])
+		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint[1:]) // FIXME: validate this always holds true
 		if err == errNilBoundaryData {
 			continue
 		}
@@ -315,12 +321,6 @@ func batchBy(items []string, batchSize int) (batches [][]string) {
 	}
 
 	return append(batches, items)
-}
-
-type ExecutionResult struct {
-	ServiceURL     string
-	InsertionPoint []string
-	Data           interface{}
 }
 
 func mergeExecutionResults(results []ExecutionResult) (map[string]interface{}, error) {
