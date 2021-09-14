@@ -30,26 +30,53 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 			id: ID!
 		}
 
-		type SnapshotImplementation implements Snapshot {
+		type Gadget @boundary {
+			id: ID!
+		}
+
+		type GizmoImplementation implements Snapshot {
 			id: ID!
 			name: String!
 			gizmos: [Gizmo!]!
+		}
+
+		type GadgetImplementation implements Snapshot {
+			id: ID!
+			name: String!
+			gadgets: [Gadget!]!
 		}
 
 		type Query {
 			snapshot(id: ID!): Snapshot!
 		}`,
 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`
-			{
-				"data": {
-					"snapshot": {
-						"id": "100",
-						"name": "foo",
-						"gizmos": [{ "id": "1" }]
+			body, _ := io.ReadAll(r.Body)
+			if strings.Contains(string(body), "GIZMO1") {
+				w.Write([]byte(`
+				{
+					"data": {
+						"snapshot": {
+							"id": "100",
+							"name": "foo",
+							"gizmos": [{ "id": "GIZMO1" }],
+							"__typename": "GizmoImplementation"
+						}
 					}
-				}
-			}`))
+				}`))
+			} else {
+				w.Write([]byte(`
+				{
+					"data": {
+						"snapshot": {
+							"id": "100",
+							"name": "foo",
+							"gadgets": [{ "id": "GADGET1" }],
+							"__typename": "GadgetImplementation"
+						}
+					}
+				}`))
+
+			}
 		}),
 	}
 
@@ -61,19 +88,40 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 			name: String!
 		}
 
+		type Gadget @boundary {
+			id: ID!
+			name: String!
+		}
+
 		type Query {
 			gizmo(id: ID!): Gizmo @boundary
+			gadgets(id: [ID!]!): [Gadget!]! @boundary
 		}`,
 		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`
-			{
-				"data": {
-					"_0": {
-						"id": "1",
-						"name": "Gizmo #1"
+			body, _ := io.ReadAll(r.Body)
+			if strings.Contains(string(body), "GIZMO1") {
+				w.Write([]byte(`
+				{
+					"data": {
+						"_0": {
+							"id": "GIZMO1",
+							"name": "Gizmo #1"
+						}
 					}
-				}
-			}`))
+				}`))
+			} else {
+				w.Write([]byte(`
+				{
+					"data": {
+						"_results": [
+							{
+								"id": "GADGET1",
+								"name": "Gadget #1"
+							}
+						]
+					}
+				}`))
+			}
 		}),
 	}
 
@@ -82,10 +130,10 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 			services: []testService{serviceA, serviceB},
 			query: `
 			query Foo {
-				snapshot(id: "foo") {
+				snapshot(id: "GIZMO1") {
 					id
 					name
-					... on SnapshotImplementation {
+					... on GizmoImplementation {
 						gizmos {
 							id
 							name
@@ -98,7 +146,7 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 				"snapshot": {
 					"id": "100",
 					"name": "foo",
-					"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
+					"gizmos": [{ "id": "GIZMO1", "name": "Gizmo #1" }]
 				}
 			}`,
 		}
@@ -111,14 +159,14 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 			services: []testService{serviceA, serviceB},
 			query: `
 			query Foo {
-				snapshot(id: "foo") {
+				snapshot(id: "GIZMO1") {
 					id
 					name
 					... NamedFragment
 				}
 			}
 
-			fragment NamedFragment on SnapshotImplementation {
+			fragment NamedFragment on GizmoImplementation {
 				gizmos {
 					id
 					name
@@ -129,7 +177,7 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 				"snapshot": {
 					"id": "100",
 					"name": "foo",
-					"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
+					"gizmos": [{ "id": "GIZMO1", "name": "Gizmo #1" }]
 				}
 			}`,
 		}
@@ -142,7 +190,7 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 			services: []testService{serviceA, serviceB},
 			query: `
 			query Foo {
-				snapshot(id: "foo") {
+				snapshot(id: "GIZMO1") {
 					... NamedFragment
 				}
 			}
@@ -150,7 +198,7 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 			fragment NamedFragment on Snapshot {
 				id
 				name
-				... on SnapshotImplementation {
+				... on GizmoImplementation {
 					gizmos {
 						id
 						name
@@ -162,13 +210,53 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 				"snapshot": {
 					"id": "100",
 					"name": "foo",
-					"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
+					"gizmos": [{ "id": "GIZMO1", "name": "Gizmo #1" }]
 				}
 			}`,
 		}
 
 		f.checkSuccess(t)
 	})
+
+	t.Run("with multiple implementation fragment spread", func(t *testing.T) {
+		f := &queryExecution2Fixture{
+			services: []testService{serviceA, serviceB},
+			query: `
+			query Foo {
+				snapshot(id: "GIZMO1") {
+					... NamedFragment
+				}
+			}
+
+			fragment NamedFragment on Snapshot {
+				id
+				name
+				... on GizmoImplementation {
+					gizmos {
+						id
+						name
+				  	}
+				}
+				... on GadgetImplementation {
+					gadgets {
+						id
+						name
+				  	}
+				}
+			}`,
+			expected: `
+			{
+				"snapshot": {
+					"id": "100",
+					"name": "foo",
+					"gizmos": [{ "id": "GIZMO1", "name": "Gizmo #1" }]
+				}
+			}`,
+		}
+
+		f.checkSuccess(t)
+	})
+
 }
 
 func TestQueryExecution2MultipleServices(t *testing.T) {
