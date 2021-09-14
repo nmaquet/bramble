@@ -246,7 +246,7 @@ func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, er
 			return []string{id}, nil
 		case []interface{}:
 			result := []string{}
-			for innerPtr := range ptr {
+			for _, innerPtr := range ptr {
 				ids, err := extractBoundaryIDs(innerPtr, insertionPoint)
 				if err != nil {
 					return nil, err
