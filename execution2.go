@@ -14,7 +14,10 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
-var errNilBoundaryData = errors.New("found a null when attempting to extract boundary ids")
+var (
+	errNilBoundaryData   = errors.New("found a null when attempting to extract boundary ids")
+	errNullBubbledToRoot = errors.New("bubbleUpNullValuesInPlace: null bubbled up to root")
+)
 
 type QueryExecution2 struct {
 	Schema       *ast.Schema
@@ -81,8 +84,10 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 		panic("non mutation or query root step")
 	}
 
+	var data map[string]interface{}
+
 	// FIXME: handle downstream errors in result object
-	data, err := q.executeDocument(ctx, document, step.ServiceURL)
+	err := q.executeDocument(ctx, document, step.ServiceURL, &data)
 	if err != nil {
 		// FIXME: error handling with channels
 		panic(err)
@@ -104,14 +109,6 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 	}
 }
 
-func (q *QueryExecution2) executeDocument(ctx context.Context, document string, serviceURL string) (map[string]interface{}, error) {
-	var response map[string]interface{}
-	req := NewRequest(document)
-	req.Headers = GetOutgoingRequestHeadersFromContext(ctx)
-	err := q.graphqlClient.Request(ctx, serviceURL, req, &response)
-	return response, err
-}
-
 func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanStep, boundaryIDs []string, resultsChan chan ExecutionResult, waitGroup *sync.WaitGroup) {
 	defer waitGroup.Done()
 
@@ -122,18 +119,15 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 		// FIXME: error handling with channels
 		panic(err)
 	}
-	data := make(map[string]interface{})
-	for _, document := range documents {
-		partialData, err := q.executeDocument(ctx, document, step.ServiceURL)
-		if err != nil {
-			// FIXME: error handling with channels
-			panic(err)
-		}
-		for id, value := range partialData {
-			data[id] = value
-		}
+
+	data, err := q.executeBoundaryQuery(ctx, documents, step.ServiceURL, boundaryFieldGetter)
+	if err != nil {
+		// FIXME: error handling with channels
+		panic(err)
 	}
+
 	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
+
 	for _, childStep := range step.Then {
 		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint) // FIXME: this is not correct
 		if err == errNilBoundaryData {
@@ -146,6 +140,41 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 		waitGroup.Add(1)
 		go q.executeChildStep(ctx, *childStep, boundaryIDs, resultsChan, waitGroup)
 	}
+}
+
+func (q *QueryExecution2) executeBoundaryQuery(ctx context.Context, documents []string, serviceURL string, boundaryFieldGetter BoundaryQuery) ([]interface{}, error) {
+	output := make([]interface{}, 0, 0)
+	if !boundaryFieldGetter.Array {
+		for _, document := range documents {
+			partialData := make(map[string]interface{})
+			err := q.executeDocument(ctx, document, serviceURL, &partialData)
+			if err != nil {
+				return nil, err
+			}
+			for _, value := range partialData {
+				output = append(output, value)
+			}
+		}
+		return output, nil
+	}
+
+	if len(documents) != 1 {
+		return nil, errors.New("there should only be a single document for array boundary field lookups")
+	}
+
+	data := struct {
+		Result []interface{} `json:"_result"`
+	}{}
+
+	err := q.executeDocument(ctx, documents[0], serviceURL, &data)
+	return data.Result, err
+}
+
+func (q *QueryExecution2) executeDocument(ctx context.Context, document string, serviceURL string, response interface{}) error {
+	req := NewRequest(document)
+	req.Headers = GetOutgoingRequestHeadersFromContext(ctx)
+	err := q.graphqlClient.Request(ctx, serviceURL, req, &response)
+	return err
 }
 
 func ExecuteBrambleStep(queryPlanStep *QueryPlanStep) (*ExecutionResult, error) {
@@ -195,8 +224,6 @@ func hasNamespaceDirective(directiveList ast.DirectiveList) bool {
 	}
 	return false
 }
-
-var errNilBoundaryData = errors.New("found a null when attempting to extract boundary ids")
 
 // FIXME: dedupe result?
 func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, error) {
@@ -293,31 +320,43 @@ func batchBy(items []string, batchSize int) (batches [][]string) {
 type ExecutionResult struct {
 	ServiceURL     string
 	InsertionPoint []string
-	Data           map[string]interface{}
+	Data           interface{}
 }
 
 func mergeExecutionResults(results []ExecutionResult) (map[string]interface{}, error) {
 	if len(results) == 0 {
 		return nil, errors.New("mergeExecutionResults: nothing to merge")
 	}
+
 	if len(results) == 1 {
-		return results[0].Data, nil
+		dataMap, ok := results[0].Data.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("a complete graphql response should be map[string]interface{}, got %T", results[0].Data)
+		}
+		return dataMap, nil
 	}
+
 	data := results[0].Data
 	for _, result := range results[1:] {
 		if err := mergeExecutionResultsRec(result.Data, data, result.InsertionPoint); err != nil {
 			return nil, err
 		}
 	}
-	return data, nil
+
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("merged execution results should be map[string]interface{}, got %T", data)
+	}
+
+	return dataMap, nil
 }
 
-func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, insertionPoint []string) error {
+func mergeExecutionResultsRec(src interface{}, dst interface{}, insertionPoint []string) error {
 	// base case for root steps (insertion point is always empty for root steps)
 	if len(insertionPoint) == 0 {
 		switch ptr := dst.(type) {
 		case map[string]interface{}:
-			for k, v := range src {
+			for k, v := range src.(map[string]interface{}) {
 				ptr[k] = v
 			}
 		default:
@@ -333,12 +372,31 @@ func mergeExecutionResultsRec(src map[string]interface{}, dst interface{}, inser
 			if err != nil {
 				return err
 			}
-			data, err := mapAtJSONPath(src, nodeAlias(0))
+
+			boundaryResults, err := getBoundaryFieldResults(src)
 			if err != nil {
 				return err
 			}
-			for k, v := range data {
-				ptr[k] = v
+
+			dstID, err := idAtJSONPath(ptr)
+			if err != nil {
+				return err
+			}
+
+			for _, result := range boundaryResults {
+				srcID, err := idAtJSONPath(result)
+				if err != nil {
+					return err
+				}
+				if srcID == dstID {
+					for k, v := range result {
+						if k == "_id" || k == "id" {
+							continue
+						}
+
+						ptr[k] = v
+					}
+				}
 			}
 		case []interface{}:
 			for _, dstValue := range ptr {
@@ -443,39 +501,21 @@ func valueAtJSONPath(val interface{}, path ...string) (interface{}, error) {
 	return val, nil
 }
 
-func getBoundaryFieldResults(src map[string]interface{}) ([]map[string]interface{}, error) {
-	arrayBoundaryFieldResults, ok := src["_result"]
-	if ok {
-		slice, ok := arrayBoundaryFieldResults.([]interface{})
-		if !ok {
-			return nil, fmt.Errorf("getBoundaryFieldResults: expected value to be a '[]map[string]interface{}' but got '%T'", arrayBoundaryFieldResults)
-		}
-		var result []map[string]interface{}
-		for i, element := range slice {
-			elementMap, ok := element.(map[string]interface{})
-			if !ok {
-				return nil, fmt.Errorf("getBoundaryFieldResults: expect value at index %d to be map[string]interface{}' but got '%T'", i, element)
-			}
-			result = append(result, elementMap)
-		}
-		return result, nil
+func getBoundaryFieldResults(src interface{}) ([]map[string]interface{}, error) {
+	slice, ok := src.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("getBoundaryFieldResults: expected value to be a '[]map[string]interface{}' but got '%T'", slice)
 	}
 	var result []map[string]interface{}
-	for i := 0; i < len(src); i++ {
-		element, ok := src[nodeAlias(i)]
-		if !ok {
-			return nil, fmt.Errorf("getBoundaryFieldResults: unexpected missing key '%s'", nodeAlias(i))
-		}
+	for i, element := range slice {
 		elementMap, ok := element.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("getBoundaryFieldResults: expect value at '%s' to be map[string]interface{}' but got '%T'", nodeAlias(i), element)
+			return nil, fmt.Errorf("getBoundaryFieldResults: expect value at index %d to be map[string]interface{}' but got '%T'", i, element)
 		}
 		result = append(result, elementMap)
 	}
 	return result, nil
 }
-
-var ErrNullBubbledToRoot = errors.New("bubbleUpNullValuesInPlace: null bubbled up to root")
 
 // bubbleUpNullValuesInPlace checks for expected null values (as per schema) and bubbles them up if needed, and checks for
 // unexpected null values and returns errors for each (these unexpected nulls are also bubbled up).
@@ -486,7 +526,7 @@ func bubbleUpNullValuesInPlace(schema *ast.Schema, selectionSet ast.SelectionSet
 		return nil, err
 	}
 	if bubbleUp {
-		return nil, ErrNullBubbledToRoot
+		return nil, errNullBubbledToRoot
 	}
 	return errs, nil
 }
