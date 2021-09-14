@@ -514,7 +514,6 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 					if field.Definition.Type.NonNull {
 						errs = append(errs, GraphqlError{Message: "field failed to resolve", Path: append(path, ast.PathName(field.Alias)), Extensions: nil})
 						bubbleUp = true
-						return
 					}
 					return
 				}
