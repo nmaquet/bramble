@@ -14,6 +14,8 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
+var errNilBoundaryData = errors.New("found a null when attempting to extract boundary ids")
+
 type QueryExecution2 struct {
 	Schema       *ast.Schema
 	Errors       []*gqlerror.Error
@@ -90,6 +92,9 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 
 	for _, childStep := range step.Then {
 		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint)
+		if err == errNilBoundaryData {
+			continue
+		}
 		if err != nil {
 			// FIXME: error handling with channels
 			panic(err)
@@ -131,6 +136,9 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
 	for _, childStep := range step.Then {
 		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint) // FIXME: this is not correct
+		if err == errNilBoundaryData {
+			continue
+		}
 		if err != nil {
 			// FIXME: error handling with channels
 			panic(err)
@@ -188,9 +196,14 @@ func hasNamespaceDirective(directiveList ast.DirectiveList) bool {
 	return false
 }
 
+var errNilBoundaryData = errors.New("found a null when attempting to extract boundary ids")
+
 // FIXME: dedupe result?
 func extractBoundaryIDs(data interface{}, insertionPoint []string) ([]string, error) {
 	ptr := data
+	if ptr == nil {
+		return nil, errNilBoundaryData
+	}
 	if len(insertionPoint) == 0 {
 		switch ptr := ptr.(type) {
 		case map[string]interface{}:
@@ -567,6 +580,9 @@ func formatResponseBody(selectionSet ast.SelectionSet, result map[string]interfa
 
 func formatResponseDataRec(selectionSet ast.SelectionSet, result interface{}) (string, error) {
 	var buf bytes.Buffer
+	if result == nil {
+		return "null", nil
+	}
 	switch result := result.(type) {
 	case map[string]interface{}:
 		buf.WriteString("{")

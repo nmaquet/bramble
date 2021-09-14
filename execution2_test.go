@@ -17,6 +17,58 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
+func TestQueryExecution2WithNullResponse(t *testing.T) {
+	f := &queryExecution2Fixture{
+		services: []testService{
+			{
+				schema: `directive @boundary on OBJECT
+				type Movie @boundary {
+					id: ID!
+				}
+
+				type Query {
+					movies: [Movie!]
+				}`,
+				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte(`{
+						"data": {
+							"movies": null
+						}
+					}
+					`))
+				}),
+			},
+			{
+				schema: `directive @boundary on OBJECT | FIELD_DEFINITION
+				interface Node { id: ID! }
+
+				type Movie @boundary {
+					id: ID!
+					title: String
+				}
+
+				type Query {
+					movie(id: ID!): Movie! @boundary
+				}`,
+				handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+					assert.Fail(t, "handler should not be called")
+				}),
+			},
+		},
+		query: `{
+			movies {
+				id
+				title
+			}
+		}`,
+		expected: `{
+			"movies": null
+		}`,
+	}
+
+	f.checkSuccess(t)
+}
+
 func TestQueryExecution2WithSingleService(t *testing.T) {
 	f := &queryExecution2Fixture{
 		services: []testService{
