@@ -17,6 +17,160 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
+func TestFederatedQuery2FragmentSpreads(t *testing.T) {
+	serviceA := testService{
+		schema: `
+		directive @boundary on OBJECT
+		interface Snapshot {
+			id: ID!
+			name: String!
+		}
+
+		type Gizmo @boundary {
+			id: ID!
+		}
+
+		type SnapshotImplementation implements Snapshot {
+			id: ID!
+			name: String!
+			gizmos: [Gizmo!]!
+		}
+
+		type Query {
+			snapshot(id: ID!): Snapshot!
+		}`,
+		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`
+			{
+				"data": {
+					"snapshot": {
+						"id": "100",
+						"name": "foo",
+						"gizmos": [{ "id": "1" }]
+					}
+				}
+			}`))
+		}),
+	}
+
+	serviceB := testService{
+		schema: `
+		directive @boundary on OBJECT
+		type Gizmo @boundary {
+			id: ID!
+			name: String!
+		}
+
+		type Query {
+			gizmo(id: ID!): Gizmo @boundary
+		}`,
+		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`
+			{
+				"data": {
+					"_0": {
+						"id": "1",
+						"name": "Gizmo #1"
+					}
+				}
+			}`))
+		}),
+	}
+
+	t.Run("with inline fragment spread", func(t *testing.T) {
+		f := &queryExecution2Fixture{
+			services: []testService{serviceA, serviceB},
+			query: `
+			query Foo {
+				snapshot(id: "foo") {
+					id
+					name
+					... on SnapshotImplementation {
+						gizmos {
+							id
+							name
+						}
+					}
+				}
+			}`,
+			expected: `
+			{
+				"snapshot": {
+					"id": "100",
+					"name": "foo",
+					"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
+				}
+			}`,
+		}
+
+		f.checkSuccess(t)
+	})
+
+	t.Run("with named fragment spread", func(t *testing.T) {
+		f := &queryExecution2Fixture{
+			services: []testService{serviceA, serviceB},
+			query: `
+			query Foo {
+				snapshot(id: "foo") {
+					id
+					name
+					... NamedFragment
+				}
+			}
+
+			fragment NamedFragment on SnapshotImplementation {
+				gizmos {
+					id
+					name
+				}
+			}`,
+			expected: `
+			{
+				"snapshot": {
+					"id": "100",
+					"name": "foo",
+					"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
+				}
+			}`,
+		}
+
+		f.checkSuccess(t)
+	})
+
+	t.Run("with nested fragment spread", func(t *testing.T) {
+		f := &queryExecution2Fixture{
+			services: []testService{serviceA, serviceB},
+			query: `
+			query Foo {
+				snapshot(id: "foo") {
+					... NamedFragment
+				}
+			}
+
+			fragment NamedFragment on Snapshot {
+				id
+				name
+				... on SnapshotImplementation {
+					gizmos {
+						id
+						name
+				  	}
+				}
+			}`,
+			expected: `
+			{
+				"snapshot": {
+					"id": "100",
+					"name": "foo",
+					"gizmos": [{ "id": "1", "name": "Gizmo #1" }]
+				}
+			}`,
+		}
+
+		f.checkSuccess(t)
+	})
+}
+
 func TestQueryExecution2MultipleServices(t *testing.T) {
 	f := &queryExecution2Fixture{
 		services: []testService{
