@@ -510,6 +510,14 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 			case *ast.Field:
 				field := selection
 				value := result[field.Alias]
+				if value == nil {
+					if field.Definition.Type.NonNull {
+						errs = append(errs, GraphqlError{Message: "field failed to resolve", Path: append(path, ast.PathName(field.Alias)), Extensions: nil})
+						bubbleUp = true
+						return
+					}
+					return
+				}
 				if field.SelectionSet != nil {
 					lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, field.Definition.Type, field.SelectionSet, value, append(path, ast.PathName(field.Alias)))
 					if lowerErr != nil {
@@ -523,11 +531,6 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 						}
 					}
 					errs = append(errs, lowerErrs...)
-				} else {
-					if value == nil && field.Definition.Type.NonNull {
-						errs = append(errs, GraphqlError{Message: "field failed to resolve", Path: append(path, ast.PathName(field.Alias)), Extensions: nil})
-						bubbleUp = true
-					}
 				}
 			case *ast.FragmentSpread:
 				fragment := selection
