@@ -370,13 +370,13 @@ func mergeExecutionResultsRec(src interface{}, dst interface{}, insertionPoint [
 					return err
 				}
 
-				dstID, err := idAtJSONPath(ptr)
+				dstID, err := boundaryIDFromMap(ptr)
 				if err != nil {
 					return err
 				}
 
 				for _, result := range boundaryResults {
-					srcID, err := idAtJSONPath(result)
+					srcID, err := boundaryIDFromMap(result)
 					if err != nil {
 						return err
 					}
@@ -425,51 +425,20 @@ func mergeExecutionResultsRec(src interface{}, dst interface{}, insertionPoint [
 	return nil
 }
 
-func mapAtJSONPath(value interface{}, path ...string) (map[string]interface{}, error) {
-	result, err := valueAtJSONPath(value, path...)
-	if err != nil {
-		return nil, err
-	}
-	resultMap, ok := result.(map[string]interface{})
+func boundaryIDFromMap(val interface{}) (string, error) {
+	boundaryMap, ok := val.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("mapAtJSONPath: expected value to be a 'map[string]interface{}' but got '%T'", result)
+		return "", errors.New("boundaryIDFromMap: expected map to extract boundary id")
 	}
-	return resultMap, nil
-}
-
-func idAtJSONPath(val interface{}, path ...string) (string, error) {
-	valueAtPath, err := valueAtJSONPath(val, path...)
-	if err != nil {
-		return "", err
-	}
-	mapAtPath, ok := valueAtPath.(map[string]interface{})
-	if !ok {
-		return "", errors.New("idAtJSONPath: value at path is not a map")
-	}
-	id, ok := mapAtPath["_id"].(string)
+	id, ok := boundaryMap["_id"].(string)
 	if ok {
 		return id, nil
 	}
-	id, ok = mapAtPath["id"].(string)
+	id, ok = boundaryMap["id"].(string)
 	if ok {
 		return id, nil
 	}
-	return "", errors.New("idAtJSONPath: 'id' or '_id' not found")
-}
-
-func valueAtJSONPath(val interface{}, path ...string) (interface{}, error) {
-	for len(path) > 0 {
-		valMap, ok := val.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("valueAtJSONPath: expected value to be a 'map[string]interface{}' but got '%T'", val)
-		}
-		val, ok = valMap[path[0]]
-		if !ok {
-			return nil, errors.New("valueAtJSONPath: invalid path")
-		}
-		path = path[1:]
-	}
-	return val, nil
+	return "", errors.New("boundaryIDFromMap: 'id' or '_id' not found")
 }
 
 func getBoundaryFieldResults(src interface{}) ([]map[string]interface{}, error) {
