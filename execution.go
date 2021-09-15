@@ -350,7 +350,7 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 	}
 
 	// FIXME: deal with null bubbled to root and regular returned errors
-	_, err = bubbleUpNullValuesInPlace(qe.Schema, op.SelectionSet, mergedResult)
+	_, err = bubbleUpNullValuesInPlace(qe.schema, op.SelectionSet, mergedResult)
 	if err == errNullBubbledToRoot {
 		mergedResult = nil
 	} else if err != nil {

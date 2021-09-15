@@ -27,22 +27,21 @@ type ExecutionResult struct {
 }
 
 type QueryExecution2 struct {
-	Schema       *ast.Schema
-	Errors       []*gqlerror.Error
-	RequestCount int64
+	schema       *ast.Schema
+	requestCount int64
 
 	// FIXME: implement
 	maxRequest int64
 	// FIXME: implement?
 	tracer        opentracing.Tracer
-	graphqlClient GraphQLClientInterface
+	graphqlClient *GraphQLClient
 	// FIXME: rename the entire type
 	boundaryQueries BoundaryQueriesMap
 }
 
-func newQueryExecution2(client GraphQLClientInterface, schema *ast.Schema, boundaryQueries BoundaryQueriesMap) *QueryExecution2 {
+func newQueryExecution2(client *GraphQLClient, schema *ast.Schema, boundaryQueries BoundaryQueriesMap) *QueryExecution2 {
 	return &QueryExecution2{
-		Schema:          schema,
+		schema:          schema,
 		graphqlClient:   client,
 		boundaryQueries: boundaryQueries,
 	}
@@ -83,9 +82,9 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 	defer waitGroup.Done()
 	var document string
 	if step.ParentType == "Query" {
-		document = "query " + formatSelectionSet(ctx, q.Schema, step.SelectionSet)
+		document = "query " + formatSelectionSet(ctx, q.schema, step.SelectionSet)
 	} else if step.ParentType == "Mutation" {
-		document = "mutation " + formatSelectionSet(ctx, q.Schema, step.SelectionSet)
+		document = "mutation " + formatSelectionSet(ctx, q.schema, step.SelectionSet)
 	} else {
 		// FIXME: error handling with channels
 		panic("non mutation or query root step")
@@ -130,7 +129,7 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 
 	boundaryFieldGetter := q.boundaryQueries.Query(step.ServiceURL, step.ParentType)
 
-	documents, err := buildBoundaryQueryDocuments(ctx, q.Schema, step, boundaryIDs, boundaryFieldGetter, 50)
+	documents, err := buildBoundaryQueryDocuments(ctx, q.schema, step, boundaryIDs, boundaryFieldGetter, 50)
 	if err != nil {
 		// FIXME: error handling with channels
 		panic(err)
@@ -195,7 +194,7 @@ func (e *QueryExecution2) createGQLErrors(ctx context.Context, step QueryPlanSte
 			if extensions == nil {
 				extensions = make(map[string]interface{})
 			}
-			extensions["selectionSet"] = formatSelectionSetSingleLine(ctx, e.Schema, step.SelectionSet)
+			extensions["selectionSet"] = formatSelectionSetSingleLine(ctx, e.schema, step.SelectionSet)
 			extensions["serviceName"] = step.ServiceName
 			extensions["serviceUrl"] = step.ServiceURL
 
@@ -213,7 +212,7 @@ func (e *QueryExecution2) createGQLErrors(ctx context.Context, step QueryPlanSte
 			Path:      path,
 			Locations: locs,
 			Extensions: map[string]interface{}{
-				"selectionSet": formatSelectionSetSingleLine(ctx, e.Schema, step.SelectionSet),
+				"selectionSet": formatSelectionSetSingleLine(ctx, e.schema, step.SelectionSet),
 			},
 		})
 	}
