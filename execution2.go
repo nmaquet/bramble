@@ -138,12 +138,20 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 
 	data, err := q.executeBoundaryQuery(ctx, documents, step.ServiceURL, boundaryFieldGetter)
 	if err != nil {
-		resultsChan <- ExecutionResult{ServiceURL: step.ServiceURL, InsertionPoint: step.InsertionPoint, Data: data, Errors: q.createGQLErrors(ctx, step, err)}
+		resultsChan <- ExecutionResult{
+			ServiceURL:     step.ServiceURL,
+			InsertionPoint: step.InsertionPoint,
+			Data:           data,
+			Errors:         q.createGQLErrors(ctx, step, err),
+		}
 		return
-	return
 	}
 
-	resultsChan <- ExecutionResult{ServiceURL: step.ServiceURL, InsertionPoint: step.InsertionPoint, Data: data}
+	resultsChan <- ExecutionResult{
+		ServiceURL:     step.ServiceURL,
+		InsertionPoint: step.InsertionPoint,
+		Data:           data,
+	}
 
 	for _, childStep := range step.Then {
 		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint[1:]) // FIXME: validate this always holds true
