@@ -17,7 +17,63 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
-func TestFederatedQuery2FragmentSpreads(t *testing.T) {
+func TestQuery2Error(t *testing.T) {
+	f := &queryExecution2Fixture{
+		services: []testService{
+			{
+				schema: `type Movie {
+					id: ID!
+					title: String
+				}
+
+				type Query {
+					movie(id: ID!): Movie!
+				}
+				`,
+				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte(`{
+						"errors": [
+							{
+								"message": "Movie does not exist",
+								"path": ["movie"],
+								"extensions": {
+									"code": "NOT_FOUND"
+								}
+							}
+						]
+					}`))
+				}),
+			},
+		},
+		query: `{
+			movie(id: "1") {
+				id
+				title
+			}
+		}`,
+		errors: gqlerror.List{
+			&gqlerror.Error{
+				Message: "Movie does not exist",
+				Path:    ast.Path{ast.PathName("movie")},
+				Locations: []gqlerror.Location{
+					{Line: 2, Column: 4},
+				},
+				Extensions: map[string]interface{}{
+					"code":         "NOT_FOUND",
+					"selectionSet": `{ movie(id: "1") { id title } }`,
+					"serviceName":  "",
+				},
+			},
+			&gqlerror.Error{
+				Message: `got a null response for non-nullable field "movie"`,
+			},
+		},
+	}
+
+	f.run(t)
+}
+
+func SkipTestFederatedQuery2FragmentSpreads(t *testing.T) {
 	serviceA := testService{
 		schema: `
 		directive @boundary on OBJECT

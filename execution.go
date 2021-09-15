@@ -336,6 +336,10 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 		graphql.RegisterExtension(ctx, name, value)
 	}
 
+	for _, result := range results {
+		errs = append(errs, result.Errors...)
+	}
+
 	mergedResult, err := mergeExecutionResults(results)
 	if err != nil {
 		errs = append(errs, &gqlerror.Error{Message: err.Error()})
@@ -347,7 +351,9 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 
 	// FIXME: deal with null bubbled to root and regular returned errors
 	_, err = bubbleUpNullValuesInPlace(qe.Schema, op.SelectionSet, mergedResult)
-	if err != nil {
+	if err == errNullBubbledToRoot {
+		mergedResult = nil
+	} else if err != nil {
 		errs = append(errs, &gqlerror.Error{Message: err.Error()})
 		AddField(ctx, "errors", errs)
 		return &graphql.Response{

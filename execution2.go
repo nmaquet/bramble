@@ -23,6 +23,7 @@ type ExecutionResult struct {
 	ServiceURL     string
 	InsertionPoint []string
 	Data           interface{}
+	Errors         gqlerror.List
 }
 
 type QueryExecution2 struct {
@@ -95,11 +96,20 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 	// FIXME: handle downstream errors in result object
 	err := q.executeDocument(ctx, document, step.ServiceURL, &data)
 	if err != nil {
-		// FIXME: error handling with channels
-		panic(err)
+		resultsChan <- ExecutionResult{
+			ServiceURL:     step.ServiceURL,
+			InsertionPoint: step.InsertionPoint,
+			Data:           data,
+			Errors:         q.createGQLErrors(ctx, step, err),
+		}
+		return
 	}
 
-	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
+	resultsChan <- ExecutionResult{
+		ServiceURL:     step.ServiceURL,
+		InsertionPoint: step.InsertionPoint,
+		Data:           data,
+	}
 
 	for _, childStep := range step.Then {
 		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint)
@@ -128,11 +138,12 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 
 	data, err := q.executeBoundaryQuery(ctx, documents, step.ServiceURL, boundaryFieldGetter)
 	if err != nil {
-		// FIXME: error handling with channels
-		panic(err)
+		resultsChan <- ExecutionResult{ServiceURL: step.ServiceURL, InsertionPoint: step.InsertionPoint, Data: data, Errors: q.createGQLErrors(ctx, step, err)}
+		return
+	return
 	}
 
-	resultsChan <- ExecutionResult{step.ServiceURL, step.InsertionPoint, data}
+	resultsChan <- ExecutionResult{ServiceURL: step.ServiceURL, InsertionPoint: step.InsertionPoint, Data: data}
 
 	for _, childStep := range step.Then {
 		boundaryIDs, err := extractBoundaryIDs(data, childStep.InsertionPoint[1:]) // FIXME: validate this always holds true
@@ -146,6 +157,60 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 		waitGroup.Add(1)
 		go q.executeChildStep(ctx, *childStep, boundaryIDs, resultsChan, waitGroup)
 	}
+}
+
+func (e *QueryExecution2) createGQLErrors(ctx context.Context, step QueryPlanStep, err error) gqlerror.List {
+	var path ast.Path
+	for _, p := range step.InsertionPoint {
+		path = append(path, ast.PathName(p))
+	}
+
+	var locs []gqlerror.Location
+	for _, f := range selectionSetToFields(step.SelectionSet) {
+		pos := f.GetPosition()
+		if pos == nil {
+			continue
+		}
+		locs = append(locs, gqlerror.Location{Line: pos.Line, Column: pos.Column})
+
+		// if the field has a subset it's part of the path
+		if len(f.SelectionSet) > 0 {
+			path = append(path, ast.PathName(f.Alias))
+		}
+	}
+
+	var gqlErr GraphqlErrors
+	var outputErrs gqlerror.List
+	if errors.As(err, &gqlErr) {
+		for _, ge := range gqlErr {
+			extensions := ge.Extensions
+			if extensions == nil {
+				extensions = make(map[string]interface{})
+			}
+			extensions["selectionSet"] = formatSelectionSetSingleLine(ctx, e.Schema, step.SelectionSet)
+			extensions["serviceName"] = step.ServiceName
+			extensions["serviceUrl"] = step.ServiceURL
+
+			outputErrs = append(outputErrs, &gqlerror.Error{
+				Message:    ge.Message,
+				Path:       path,
+				Locations:  locs,
+				Extensions: extensions,
+			})
+		}
+		return outputErrs
+	} else {
+		outputErrs = append(outputErrs, &gqlerror.Error{
+			Message:   err.Error(),
+			Path:      path,
+			Locations: locs,
+			Extensions: map[string]interface{}{
+				"selectionSet": formatSelectionSetSingleLine(ctx, e.Schema, step.SelectionSet),
+			},
+		})
+	}
+
+	return outputErrs
 }
 
 func (q *QueryExecution2) executeBoundaryQuery(ctx context.Context, documents []string, serviceURL string, boundaryFieldGetter BoundaryQuery) ([]interface{}, error) {
@@ -572,7 +637,7 @@ func formatResponseDataRec(selectionSet ast.SelectionSet, result interface{}) (s
 		for i, field := range fields {
 			fieldData, ok := result[field.Alias]
 			if !ok {
-				return "", fmt.Errorf("could not find value in data for field %s", field.Alias)
+				return "", fmt.Errorf("got a null response for non-nullable field %q", field.Alias)
 			}
 			buf.WriteString(fmt.Sprintf(`"%s":`, field.Alias))
 			if field.SelectionSet != nil {
