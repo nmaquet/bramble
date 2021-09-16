@@ -47,7 +47,7 @@ func newQueryExecution2(client *GraphQLClient, schema *ast.Schema, boundaryQueri
 	}
 }
 
-func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]ExecutionResult, []*gqlerror.List) {
+func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]ExecutionResult, gqlerror.List) {
 	stepWg := &sync.WaitGroup{}
 	readWg := &sync.WaitGroup{}
 	resultsChan := make(chan ExecutionResult)
@@ -56,9 +56,10 @@ func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]E
 		if step.ServiceURL == internalServiceName {
 			r, err := ExecuteBrambleStep(step)
 			if err != nil {
-				return nil, []*gqlerror.List{}
+				return nil, q.createGQLErrors(ctx, *step, err)
 			}
 			results = append(results, *r)
+			continue
 		}
 		stepWg.Add(1)
 		go q.ExecuteRootStep(ctx, *step, resultsChan, stepWg)
@@ -92,13 +93,11 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 
 	var data map[string]interface{}
 
-	// FIXME: handle downstream errors in result object
 	err := q.executeDocument(ctx, document, step.ServiceURL, &data)
 	if err != nil {
 		resultsChan <- ExecutionResult{
 			ServiceURL:     step.ServiceURL,
 			InsertionPoint: step.InsertionPoint,
-			Data:           data,
 			Errors:         q.createGQLErrors(ctx, step, err),
 		}
 		return
@@ -260,6 +259,7 @@ func ExecuteBrambleStep(queryPlanStep *QueryPlanStep) (*ExecutionResult, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	return &ExecutionResult{
 		ServiceURL:     internalServiceName,
 		InsertionPoint: []string{},
@@ -273,10 +273,6 @@ func BuildTypenameResponseMap(selectionSet ast.SelectionSet, parentTypeName stri
 		if field.SelectionSet != nil {
 			if field.Definition.Type.NamedType == "" {
 				return nil, fmt.Errorf("expected named type")
-			}
-
-			if !hasNamespaceDirective(field.Directives) {
-				return nil, fmt.Errorf("expected namespace directive")
 			}
 
 			var err error
@@ -401,7 +397,12 @@ func mergeExecutionResults(results []ExecutionResult) (map[string]interface{}, e
 	}
 
 	if len(results) == 1 {
-		dataMap, ok := results[0].Data.(map[string]interface{})
+		data := results[0].Data
+		if data == nil {
+			return nil, nil
+		}
+
+		dataMap, ok := data.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("a complete graphql response should be map[string]interface{}, got %T", results[0].Data)
 		}
@@ -431,9 +432,7 @@ func mergeExecutionResultsRec(src interface{}, dst interface{}, insertionPoint [
 			switch src := src.(type) {
 			// base case for root step merging
 			case map[string]interface{}:
-				for k, v := range src {
-					ptr[k] = v
-				}
+				mergeMaps(ptr, src)
 
 			// base case for children step merging
 			case []interface{}:

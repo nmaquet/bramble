@@ -17,6 +17,64 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
+
+func TestQueryWithNamespace(t *testing.T) {
+	f := &queryExecution2Fixture{
+		services: []testService{
+			{
+				schema: `
+				directive @namespace on OBJECT
+
+				type NamespacedMovie {
+					id: ID!
+					title: String
+				}
+
+				type NamespaceQuery @namespace {
+					movie(id: ID!): NamespacedMovie!
+				}
+
+				type Query {
+					namespace: NamespaceQuery!
+				}
+				`,
+				handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte(`{
+						"data": {
+							"namespace": {
+								"movie": {
+									"id": "1",
+									"title": "Test title"
+								}
+							}
+						}
+					}`))
+				}),
+			},
+		},
+		query: `{
+			namespace {
+				movie(id: "1") {
+					id
+					title
+				}
+				__typename
+			}
+		}`,
+		expected: `{
+			"namespace": {
+				"movie": {
+					"id": "1",
+					"title": "Test title"
+				},
+				"__typename": "NamespaceQuery"
+			}
+		}`,
+	}
+
+	f.checkSuccess(t)
+}
+
 func TestQuery2Error(t *testing.T) {
 	f := &queryExecution2Fixture{
 		services: []testService{
