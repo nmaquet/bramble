@@ -660,6 +660,7 @@ func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, re
 					buf.WriteString(innerBody)
 				}
 			case *ast.FragmentSpread:
+				// FIXME: validate if we need to handle interface implementations like above, currently appears we do not
 				innerBody, err := formatResponseDataRec(schema, selection.Definition.SelectionSet, result, true)
 				if err != nil {
 					return "", err
