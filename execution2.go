@@ -658,10 +658,7 @@ func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, re
 						return "", err
 					}
 					buf.WriteString(innerBody)
-				} else {
-					fmt.Println("we skip")
 				}
-
 			case *ast.FragmentSpread:
 				innerBody, err := formatResponseDataRec(schema, selection.Definition.SelectionSet, result, true)
 				if err != nil {
