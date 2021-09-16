@@ -275,6 +275,8 @@ func BuildTypenameResponseMap(selectionSet ast.SelectionSet, parentTypeName stri
 				return nil, fmt.Errorf("expected named type")
 			}
 
+			// FIXME: why are the definitions always null
+
 			var err error
 			result[field.Alias], err = BuildTypenameResponseMap(field.SelectionSet, field.Definition.Type.Name())
 			if err != nil {
