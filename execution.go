@@ -361,7 +361,7 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 		}
 	}
 
-	formattedResponse, err := formatResponseBody(op.SelectionSet, mergedResult)
+	formattedResponse, err := formatResponseBody(qe.schema, op.SelectionSet, mergedResult)
 	if err != nil {
 		errs = append(errs, &gqlerror.Error{Message: err.Error()})
 		AddField(ctx, "errors", errs)

@@ -17,7 +17,6 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
-
 func TestQueryWithNamespace(t *testing.T) {
 	f := &queryExecution2Fixture{
 		services: []testService{
@@ -131,7 +130,7 @@ func TestQuery2Error(t *testing.T) {
 	f.run(t)
 }
 
-func SkipTestFederatedQuery2FragmentSpreads(t *testing.T) {
+func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 	serviceA := testService{
 		schema: `
 		directive @boundary on OBJECT
@@ -227,7 +226,7 @@ func SkipTestFederatedQuery2FragmentSpreads(t *testing.T) {
 				w.Write([]byte(`
 				{
 					"data": {
-						"_results": [
+						"_result": [
 							{
 								"id": "GADGET1",
 								"name": "Gadget #1"
@@ -332,18 +331,18 @@ func SkipTestFederatedQuery2FragmentSpreads(t *testing.T) {
 		f.checkSuccess(t)
 	})
 
-	t.Run("with multiple implementation fragment spread", func(t *testing.T) {
+	t.Run("with multiple implementation fragment spreads (gizmo implementation)", func(t *testing.T) {
 		f := &queryExecution2Fixture{
 			services: []testService{serviceA, serviceB},
 			query: `
-			query Foo {
+			query {
 				snapshot(id: "GIZMO1") {
+					id
 					... NamedFragment
 				}
 			}
 
 			fragment NamedFragment on Snapshot {
-				id
 				name
 				... on GizmoImplementation {
 					gizmos {
@@ -364,6 +363,47 @@ func SkipTestFederatedQuery2FragmentSpreads(t *testing.T) {
 					"id": "100",
 					"name": "foo",
 					"gizmos": [{ "id": "GIZMO1", "name": "Gizmo #1" }]
+				}
+			}`,
+		}
+
+		f.checkSuccess(t)
+	})
+
+	t.Run("with multiple implementation fragment spreads (gadget implementation)", func(t *testing.T) {
+		f := &queryExecution2Fixture{
+			services: []testService{serviceA, serviceB},
+			query: `
+			query Foo {
+				snapshot(id: "GADGET1") {
+					... NamedFragment
+				}
+			}
+
+			fragment GadgetFragment on GadgetImplementation {
+				gadgets {
+					id
+					name
+				}
+			}
+
+			fragment NamedFragment on Snapshot {
+				id
+				name
+				... on GizmoImplementation {
+					gizmos {
+						id
+						name
+				  	}
+				}
+				... GadgetFragment
+			}`,
+			expected: `
+			{
+				"snapshot": {
+					"id": "100",
+					"name": "foo",
+					"gadgets": [{ "id": "GADGET1", "name": "Gadget #1" }]
 				}
 			}`,
 		}
@@ -1691,7 +1731,7 @@ func TestFormatResponseBody(t *testing.T) {
 			}`
 
 		document := gqlparser.MustLoadQuery(schema, query)
-		bodyJSON, err := formatResponseBody(document.Operations[0].SelectionSet, result)
+		bodyJSON, err := formatResponseBody(schema, document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
 		require.JSONEq(t, expectedJSON, bodyJSON)
 	})
@@ -1747,7 +1787,7 @@ func TestFormatResponseBody(t *testing.T) {
 			}`
 
 		document := gqlparser.MustLoadQuery(schema, query)
-		bodyJSON, err := formatResponseBody(document.Operations[0].SelectionSet, result)
+		bodyJSON, err := formatResponseBody(schema, document.Operations[0].SelectionSet, result)
 		require.NoError(t, err)
 		require.JSONEq(t, expectedJSON, bodyJSON)
 	})

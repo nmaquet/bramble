@@ -629,48 +629,79 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 	return
 }
 
-func formatResponseBody(selectionSet ast.SelectionSet, result map[string]interface{}) (string, error) {
-	return formatResponseDataRec(selectionSet, result)
+func formatResponseBody(schema *ast.Schema, selectionSet ast.SelectionSet, result map[string]interface{}) (string, error) {
+	return formatResponseDataRec(schema, selectionSet, result, false)
 }
 
-func formatResponseDataRec(selectionSet ast.SelectionSet, result interface{}) (string, error) {
+// FIXME: better way to indicate we're inside a fragment than this bool
+func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, result interface{}, insideFragment bool) (string, error) {
 	var buf bytes.Buffer
 	if result == nil {
 		return "null", nil
 	}
 	switch result := result.(type) {
 	case map[string]interface{}:
-		buf.WriteString("{")
-		fields := selectionFields(selectionSet)
-		for i, field := range fields {
-			fieldData, ok := result[field.Alias]
-			if !ok {
-				return "", fmt.Errorf("got a null response for non-nullable field %q", field.Alias)
-			}
-			buf.WriteString(fmt.Sprintf(`"%s":`, field.Alias))
-			if field.SelectionSet != nil {
-				innerBody, err := formatResponseDataRec(field.SelectionSet, fieldData)
-				if err != nil {
-					return "", err
+		if !insideFragment {
+			buf.WriteString("{")
+		}
+		for i, selection := range selectionSet {
+			switch selection := selection.(type) {
+			case *ast.InlineFragment:
+				typename, ok := result["__typename"].(string)
+				if !ok {
+					return "", errors.New("expected typename")
 				}
-				buf.WriteString(innerBody)
-			} else {
-				fieldJSON, err := json.Marshal(&fieldData)
-				if err != nil {
-					return "", err
-				}
-				buf.Write(fieldJSON)
-			}
 
-			if i < len(fields)-1 {
-				buf.WriteString(",")
+				if selection.TypeCondition == typename && selection.ObjectDefinition.IsAbstractType() {
+					innerBody, err := formatResponseDataRec(schema, selection.SelectionSet, result, true)
+					if err != nil {
+						return "", err
+					}
+					buf.WriteString(innerBody)
+				} else {
+					fmt.Println("we skip")
+				}
+
+			case *ast.FragmentSpread:
+				innerBody, err := formatResponseDataRec(schema, selection.Definition.SelectionSet, result, true)
+				if err != nil {
+					return "", err
+				}
+
+				buf.WriteString(innerBody)
+			case *ast.Field:
+				field := selection
+				fieldData, ok := result[field.Alias]
+				if !ok {
+					return "", fmt.Errorf("got a null response for non-nullable field %q", field.Alias)
+				}
+				buf.WriteString(fmt.Sprintf(`"%s":`, field.Alias))
+				if field.SelectionSet != nil {
+					innerBody, err := formatResponseDataRec(schema, field.SelectionSet, fieldData, false)
+					if err != nil {
+						return "", err
+					}
+					buf.WriteString(innerBody)
+				} else {
+					fieldJSON, err := json.Marshal(&fieldData)
+					if err != nil {
+						return "", err
+					}
+					buf.Write(fieldJSON)
+				}
+
+				if i < len(selectionSet)-1 {
+					buf.WriteString(",")
+				}
 			}
 		}
-		buf.WriteString("}")
+		if !insideFragment {
+			buf.WriteString("}")
+		}
 	case []interface{}:
 		buf.WriteString("[")
 		for i, v := range result {
-			innerBody, err := formatResponseDataRec(selectionSet, v)
+			innerBody, err := formatResponseDataRec(schema, selectionSet, v, false)
 			if err != nil {
 				return "", err
 			}
@@ -682,6 +713,7 @@ func formatResponseDataRec(selectionSet ast.SelectionSet, result interface{}) (s
 		}
 		buf.WriteString("]")
 	}
+
 	return buf.String(), nil
 }
 
