@@ -652,7 +652,7 @@ func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, re
 					return "", errors.New("expected typename")
 				}
 
-				if selection.TypeCondition == typename && selection.ObjectDefinition.IsAbstractType() {
+				if selection.TypeCondition == typename && implementsInterface(schema, typename, selection.ObjectDefinition.Name) {
 					innerBody, err := formatResponseDataRec(schema, selection.SelectionSet, result, true)
 					if err != nil {
 						return "", err
