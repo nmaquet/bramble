@@ -623,6 +623,22 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 			}
 			errs = append(errs, lowerErrs...)
 		}
+	// FIXME: why does introspection cause this
+	case []map[string]interface{}:
+		for i, value := range result {
+			lowerErrs, lowerBubbleUp, lowerErr := bubbleUpNullValuesInPlaceRec(schema, currentType, selectionSet, value, append(path, ast.PathIndex(i)))
+			if lowerErr != nil {
+				return nil, false, lowerErr
+			}
+			if lowerBubbleUp {
+				if currentType.Elem.NonNull {
+					bubbleUp = true
+				} else {
+					result[i] = nil
+				}
+			}
+			errs = append(errs, lowerErrs...)
+		}
 	default:
 		return nil, false, fmt.Errorf("bubbleUpNullValuesInPlaceRec: unxpected result type '%T'", result)
 	}
@@ -678,8 +694,11 @@ func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, re
 			case *ast.Field:
 				field := selection
 				fieldData, ok := result[field.Alias]
-				if !ok {
+				// FIXME: should the bubbling not have taken care of this?
+				if !ok && selection.Definition.Type.NonNull {
 					return "", fmt.Errorf("got a null response for non-nullable field %q", field.Alias)
+				} else if !ok {
+					return "null", nil
 				}
 				buf.WriteString(fmt.Sprintf(`"%s":`, field.Alias))
 				if field.SelectionSet != nil {
@@ -705,6 +724,21 @@ func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, re
 			buf.WriteString("}")
 		}
 	case []interface{}:
+		buf.WriteString("[")
+		for i, v := range result {
+			innerBody, err := formatResponseDataRec(schema, selectionSet, v, false)
+			if err != nil {
+				return "", err
+			}
+			buf.WriteString(innerBody)
+
+			if i < len(result)-1 {
+				buf.WriteString(",")
+			}
+		}
+		buf.WriteString("]")
+	// FIXME: why does introspection cause this
+	case []map[string]interface{}:
 		buf.WriteString("[")
 		for i, v := range result {
 			innerBody, err := formatResponseDataRec(schema, selectionSet, v, false)

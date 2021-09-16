@@ -132,7 +132,7 @@ func (s *ExecutableSchema) UpdateSchema(forceRebuild bool) error {
 
 // Exec returns the query execution handler
 func (s *ExecutableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
-	return s.ExecuteQuery
+	return s.NewPipelineExecuteQuery
 }
 
 // ExecuteQuery executes an incoming query
@@ -254,8 +254,6 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	result := make(map[string]interface{})
-
 	variables := map[string]interface{}{}
 	if graphql.HasOperationContext(ctx) {
 		reqctx := graphql.GetOperationContext(ctx)
@@ -278,13 +276,15 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 	if hasPerms {
 		filteredSchema = perms.FilterSchema(s.MergedSchema)
 	}
+
+	introspectionResult := make(map[string]interface{})
 	for _, f := range selectionSetToFields(op.SelectionSet) {
 		switch f.Name {
 		case "__type":
 			name := f.Arguments.ForName("name").Value.Raw
-			result[f.Alias] = s.resolveType(ctx, filteredSchema, &ast.Type{NamedType: name}, f.SelectionSet)
+			introspectionResult[f.Alias] = s.resolveType(ctx, filteredSchema, &ast.Type{NamedType: name}, f.SelectionSet)
 		case "__schema":
-			result[f.Alias] = s.resolveSchema(ctx, filteredSchema, f.SelectionSet)
+			introspectionResult[f.Alias] = s.resolveSchema(ctx, filteredSchema, f.SelectionSet)
 		}
 	}
 
@@ -339,6 +339,8 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 	for _, result := range results {
 		errs = append(errs, result.Errors...)
 	}
+
+	results = append([]ExecutionResult{{Data: introspectionResult}}, results...)
 
 	mergedResult, err := mergeExecutionResults(results)
 	if err != nil {
