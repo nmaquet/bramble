@@ -652,13 +652,21 @@ func formatResponseDataRec(schema *ast.Schema, selectionSet ast.SelectionSet, re
 					return "", errors.New("expected typename")
 				}
 
-				if selection.TypeCondition == typename && implementsInterface(schema, typename, selection.ObjectDefinition.Name) {
-					innerBody, err := formatResponseDataRec(schema, selection.SelectionSet, result, true)
-					if err != nil {
-						return "", err
-					}
-					buf.WriteString(innerBody)
+				currentTypeIsInterface := selection.ObjectDefinition.IsAbstractType()
+				fragmentImplementsInterface := currentTypeIsInterface &&
+					implementsInterface(schema, typename, selection.ObjectDefinition.Name)
+				resultObjectTypeMatchesFragment := selection.TypeCondition == typename
+
+				if fragmentImplementsInterface && !resultObjectTypeMatchesFragment {
+					continue
 				}
+
+				innerBody, err := formatResponseDataRec(schema, selection.SelectionSet, result, true)
+				if err != nil {
+					return "", err
+				}
+				buf.WriteString(innerBody)
+
 			case *ast.FragmentSpread:
 				// FIXME: validate if we need to handle interface implementations like above, currently appears we do not
 				innerBody, err := formatResponseDataRec(schema, selection.Definition.SelectionSet, result, true)

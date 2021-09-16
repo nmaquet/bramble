@@ -201,9 +201,15 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 			name: String!
 		}
 
+		type Agent {
+			name: String!
+			country: String!
+		}
+
 		type Gadget @boundary {
 			id: ID!
 			name: String!
+			agents: [Agent!]!
 		}
 
 		type Query {
@@ -229,7 +235,14 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 						"_result": [
 							{
 								"id": "GADGET1",
-								"name": "Gadget #1"
+								"name": "Gadget #1",
+								"agents": [
+									{
+										"name": "James Bond",
+										"country": "UK",
+										"__typename": "Agent"
+									}
+								]
 							}
 						]
 					}
@@ -384,6 +397,12 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 				gadgets {
 					id
 					name
+					agents {
+						name
+						... on Agent {
+							country
+						}
+					}
 				}
 			}
 
@@ -403,7 +422,15 @@ func TestFederatedQuery2FragmentSpreads(t *testing.T) {
 				"snapshot": {
 					"id": "100",
 					"name": "foo",
-					"gadgets": [{ "id": "GADGET1", "name": "Gadget #1" }]
+					"gadgets": [
+						{
+							"id": "GADGET1",
+							"name": "Gadget #1",
+							"agents": [
+								{"name": "James Bond", "country": "UK"}
+							]
+						}
+					]
 				}
 			}`,
 		}
