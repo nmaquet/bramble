@@ -212,7 +212,7 @@ func TestIntrospectionQuery2(t *testing.T) {
 	// 		"__type": {
 	// 			"description": "A bit like a film",
 	// 			"kind": "OBJECT",
-	// 			"name": "Movie",
+	// 			"name": "Movie"
 	// 		}
 	// 	}
 	// 	`, string(resp.Data))

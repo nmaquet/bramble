@@ -304,8 +304,13 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 	AddField(ctx, "operation.type", op.Operation)
 
 	qe := newQueryExecution2(s.GraphqlClient, s.Schema(), s.BoundaryQueries)
-	// FIXME: extract actual errors
-	results, _ := qe.Execute(ctx, *plan)
+	results, errs := qe.Execute(ctx, *plan)
+	if len(errs) > 0 {
+		return &graphql.Response{
+			Errors: errs,
+		}
+	}
+
 	extensions := make(map[string]interface{})
 	if debugInfo, ok := ctx.Value(DebugKey).(DebugInfo); ok {
 		if debugInfo.Query {

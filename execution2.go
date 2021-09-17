@@ -12,6 +12,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -48,8 +49,8 @@ func newQueryExecution2(client *GraphQLClient, schema *ast.Schema, boundaryQueri
 }
 
 func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]ExecutionResult, gqlerror.List) {
-	stepWg := &sync.WaitGroup{}
 	readWg := &sync.WaitGroup{}
+	group, ctx := errgroup.WithContext(ctx)
 	resultsChan := make(chan ExecutionResult)
 	results := []ExecutionResult{}
 	for _, step := range queryPlan.RootSteps {
@@ -61,9 +62,11 @@ func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]E
 			results = append(results, *r)
 			continue
 		}
-		stepWg.Add(1)
-		go q.ExecuteRootStep(ctx, *step, resultsChan, stepWg)
 
+		step := step
+		group.Go(func() error {
+			return q.ExecuteRootStep(ctx, *step, resultsChan, group)
+		})
 	}
 
 	readWg.Add(1)
@@ -73,22 +76,25 @@ func (q *QueryExecution2) Execute(ctx context.Context, queryPlan QueryPlan) ([]E
 		}
 		readWg.Done()
 	}()
-	stepWg.Wait()
+
+	if err := group.Wait(); err != nil {
+		return nil, gqlerror.List{&gqlerror.Error{
+			Message: err.Error(),
+		}}
+	}
 	close(resultsChan)
 	readWg.Wait()
 	return results, nil
 }
 
-func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanStep, resultsChan chan ExecutionResult, waitGroup *sync.WaitGroup) {
-	defer waitGroup.Done()
+func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanStep, resultsChan chan ExecutionResult, group *errgroup.Group) error {
 	var document string
 	if step.ParentType == "Query" {
 		document = "query " + formatSelectionSet(ctx, q.schema, step.SelectionSet)
 	} else if step.ParentType == "Mutation" {
 		document = "mutation " + formatSelectionSet(ctx, q.schema, step.SelectionSet)
 	} else {
-		// FIXME: error handling with channels
-		panic("non mutation or query root step")
+		return errors.New("non mutation or query root step")
 	}
 
 	var data map[string]interface{}
@@ -100,7 +106,7 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 			InsertionPoint: step.InsertionPoint,
 			Errors:         q.createGQLErrors(ctx, step, err),
 		}
-		return
+		return nil
 	}
 
 	resultsChan <- ExecutionResult{
@@ -115,23 +121,24 @@ func (q *QueryExecution2) ExecuteRootStep(ctx context.Context, step QueryPlanSte
 			continue
 		}
 		if err != nil {
-			// FIXME: error handling with channels
-			panic(err)
+			return err
 		}
-		waitGroup.Add(1)
-		go q.executeChildStep(ctx, *childStep, boundaryIDs, resultsChan, waitGroup)
+
+		childStep := childStep
+
+		group.Go(func() error {
+			return q.executeChildStep(ctx, *childStep, boundaryIDs, resultsChan, group)
+		})
 	}
+	return nil
 }
 
-func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanStep, boundaryIDs []string, resultsChan chan ExecutionResult, waitGroup *sync.WaitGroup) {
-	defer waitGroup.Done()
-
+func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanStep, boundaryIDs []string, resultsChan chan ExecutionResult, group *errgroup.Group) error {
 	boundaryFieldGetter := q.boundaryQueries.Query(step.ServiceURL, step.ParentType)
 
 	documents, err := buildBoundaryQueryDocuments(ctx, q.schema, step, boundaryIDs, boundaryFieldGetter, 50)
 	if err != nil {
-		// FIXME: error handling with channels
-		panic(err)
+		return err
 	}
 
 	data, err := q.executeBoundaryQuery(ctx, documents, step.ServiceURL, boundaryFieldGetter)
@@ -142,7 +149,7 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 			Data:           data,
 			Errors:         q.createGQLErrors(ctx, step, err),
 		}
-		return
+		return nil
 	}
 
 	resultsChan <- ExecutionResult{
@@ -157,12 +164,14 @@ func (q *QueryExecution2) executeChildStep(ctx context.Context, step QueryPlanSt
 			continue
 		}
 		if err != nil {
-			// FIXME: error handling with channels
-			panic(err)
+			return err
 		}
-		waitGroup.Add(1)
-		go q.executeChildStep(ctx, *childStep, boundaryIDs, resultsChan, waitGroup)
+		group.Go(func() error {
+			return q.executeChildStep(ctx, *childStep, boundaryIDs, resultsChan, group)
+		})
 	}
+
+	return nil
 }
 
 func (e *QueryExecution2) createGQLErrors(ctx context.Context, step QueryPlanStep, err error) gqlerror.List {
