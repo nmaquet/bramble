@@ -65,49 +65,49 @@ func TestIntrospectionQuery2(t *testing.T) {
 		MergedSchema: mergedSchema,
 	}
 
-	// t.Run("basic type fields", func(t *testing.T) {
-	// 	query := gqlparser.MustLoadQuery(es.MergedSchema, `{
-	// 		__type(name: "Movie") {
-	// 			kind
-	// 			name
-	// 			description
-	// 		}
-	// 	}`)
-	// 	ctx := testContextWithoutVariables(query.Operations[0])
-	// 	resp := es.NewPipelineExecuteQuery(ctx)
+	t.Run("basic type fields", func(t *testing.T) {
+		query := gqlparser.MustLoadQuery(es.MergedSchema, `{
+			__type(name: "Movie") {
+				kind
+				name
+				description
+			}
+		}`)
+		ctx := testContextWithoutVariables(query.Operations[0])
+		resp := es.NewPipelineExecuteQuery(ctx)
 
-	// 	assert.JSONEq(t, `
-	// 	{
-	// 		"__type": {
-	// 			"description": "A bit like a film",
-	// 			"kind": "OBJECT",
-	// 			"name": "Movie"
-	// 		}
-	// 	}
-	// 	`, string(resp.Data))
-	// })
+		assert.JSONEq(t, `
+		{
+			"__type": {
+				"description": "A bit like a film",
+				"kind": "OBJECT",
+				"name": "Movie"
+			}
+		}
+		`, string(resp.Data))
+	})
 
-	// t.Run("basic aliased type fields", func(t *testing.T) {
-	// 	query := gqlparser.MustLoadQuery(es.MergedSchema, `{
-	// 		movie: __type(name: "Movie") {
-	// 			type: kind
-	// 			n: name
-	// 			desc: description
-	// 		}
-	// 	}`)
-	// 	ctx := testContextWithoutVariables(query.Operations[0])
-	// 	resp := es.NewPipelineExecuteQuery(ctx)
+	t.Run("basic aliased type fields", func(t *testing.T) {
+		query := gqlparser.MustLoadQuery(es.MergedSchema, `{
+			movie: __type(name: "Movie") {
+				type: kind
+				n: name
+				desc: description
+			}
+		}`)
+		ctx := testContextWithoutVariables(query.Operations[0])
+		resp := es.NewPipelineExecuteQuery(ctx)
 
-	// 	assert.JSONEq(t, `
-	// 	{
-	// 		"movie": {
-	// 			"desc": "A bit like a film",
-	// 			"type": "OBJECT",
-	// 			"n": "Movie"
-	// 		}
-	// 	}
-	// 	`, string(resp.Data))
-	// })
+		assert.JSONEq(t, `
+		{
+			"movie": {
+				"desc": "A bit like a film",
+				"type": "OBJECT",
+				"n": "Movie"
+			}
+		}
+		`, string(resp.Data))
+	})
 
 	t.Run("lists and non-nulls", func(t *testing.T) {
 		query := gqlparser.MustLoadQuery(es.MergedSchema, `{
