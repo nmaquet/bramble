@@ -3,6 +3,7 @@ package bramble
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/99designs/gqlgen/graphql"
-	"github.com/stretchr/testify/assert"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -76,7 +77,7 @@ func TestIntrospectionQuery2(t *testing.T) {
 		ctx := testContextWithoutVariables(query.Operations[0])
 		resp := es.NewPipelineExecuteQuery(ctx)
 
-		assert.JSONEq(t, `
+		require.JSONEq(t, `
 		{
 			"__type": {
 				"description": "A bit like a film",
@@ -98,7 +99,7 @@ func TestIntrospectionQuery2(t *testing.T) {
 		ctx := testContextWithoutVariables(query.Operations[0])
 		resp := es.NewPipelineExecuteQuery(ctx)
 
-		assert.JSONEq(t, `
+		require.JSONEq(t, `
 		{
 			"movie": {
 				"desc": "A bit like a film",
@@ -136,7 +137,7 @@ func TestIntrospectionQuery2(t *testing.T) {
 	}`)
 		ctx := testContextWithoutVariables(query.Operations[0])
 		resp := es.NewPipelineExecuteQuery(ctx)
-		assert.JSONEq(t, `
+		require.JSONEq(t, `
 		{
 			"__type": {
 				"fields": [
@@ -190,33 +191,33 @@ func TestIntrospectionQuery2(t *testing.T) {
 	`, string(resp.Data))
 	})
 
-	// FIXME: handle the fact we expect __typename to be injected
-	// t.Run("fragment", func(t *testing.T) {
-	// 	query := gqlparser.MustLoadQuery(es.MergedSchema, `
-	// 	query {
-	// 		__type(name: "Movie") {
-	// 			...TypeInfo
-	// 		}
-	// 	}
+	t.Run("fragment", func(t *testing.T) {
+		query := gqlparser.MustLoadQuery(es.MergedSchema, `
+		query {
+			__type(name: "Movie") {
+				...TypeInfo
+			}
+		}
 
-	// 	fragment TypeInfo on __Type {
-	// 			description
-	// 			kind
-	// 			name
-	// 	}
-	// 	`)
-	// 	ctx := testContextWithoutVariables(query.Operations[0])
-	// 	resp := es.NewPipelineExecuteQuery(ctx)
-	// 	assert.JSONEq(t, `
-	// 	{
-	// 		"__type": {
-	// 			"description": "A bit like a film",
-	// 			"kind": "OBJECT",
-	// 			"name": "Movie"
-	// 		}
-	// 	}
-	// 	`, string(resp.Data))
-	// })
+		fragment TypeInfo on __Type {
+				description
+				kind
+				name
+		}
+		`)
+		ctx := testContextWithoutVariables(query.Operations[0])
+		resp := es.NewPipelineExecuteQuery(ctx)
+		require.Nil(t, resp.Errors, fmt.Sprintf("errors: %s", spew.Sdump(resp.Errors)))
+		require.JSONEq(t, `
+		{
+			"__type": {
+				"description": "A bit like a film",
+				"kind": "OBJECT",
+				"name": "Movie"
+			}
+		}
+		`, string(resp.Data))
+	})
 
 	t.Run("enum", func(t *testing.T) {
 		query := gqlparser.MustLoadQuery(es.MergedSchema, `
@@ -232,7 +233,7 @@ func TestIntrospectionQuery2(t *testing.T) {
 		`)
 		ctx := testContextWithoutVariables(query.Operations[0])
 		resp := es.NewPipelineExecuteQuery(ctx)
-		assert.JSONEq(t, `
+		require.JSONEq(t, `
 		{
 			"__type": {
 				"enumValues": [
@@ -289,7 +290,7 @@ func TestIntrospectionQuery2(t *testing.T) {
 		`)
 		ctx := testContextWithoutVariables(query.Operations[0])
 		resp := es.NewPipelineExecuteQuery(ctx)
-		assert.JSONEq(t, `
+		require.JSONEq(t, `
 		{
 			"__type": {
 				"possibleTypes": [
@@ -315,7 +316,7 @@ func TestIntrospectionQuery2(t *testing.T) {
 		ctx := testContextWithoutVariables(query.Operations[0])
 		resp := es.NewPipelineExecuteQuery(ctx)
 
-		assert.JSONEq(t, `
+		require.JSONEq(t, `
 		{
 			"__type": {
 				"kind": "OBJECT",
@@ -405,7 +406,7 @@ func TestIntrospectionQuery2(t *testing.T) {
 		  }
 		`), &expected)
 		require.NoError(t, err)
-		assert.ElementsMatch(t, expected.Schema.Directives, actual.Schema.Directives)
+		require.ElementsMatch(t, expected.Schema.Directives, actual.Schema.Directives)
 	})
 
 	t.Run("__schema", func(t *testing.T) {
@@ -426,7 +427,7 @@ func TestIntrospectionQuery2(t *testing.T) {
 		`)
 		ctx := testContextWithoutVariables(query.Operations[0])
 		resp := es.NewPipelineExecuteQuery(ctx)
-		assert.JSONEq(t, `
+		require.JSONEq(t, `
 		{
 			"__schema": {
 				"queryType": {
@@ -965,7 +966,7 @@ func TestQueryExecution2WithNullResponse(t *testing.T) {
 					movie(id: ID!): Movie! @boundary
 				}`,
 				handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-					assert.Fail(t, "handler should not be called")
+					require.Fail(t, "handler should not be called")
 				}),
 			},
 		},
@@ -2256,7 +2257,7 @@ type queryExecution2Fixture struct {
 func (f *queryExecution2Fixture) checkSuccess(t *testing.T) {
 	f.run(t)
 
-	assert.Empty(t, f.resp.Errors)
+	require.Empty(t, f.resp.Errors)
 	jsonEqWithOrder(t, f.expected, string(f.resp.Data))
 }
 
@@ -2298,13 +2299,13 @@ func (f *queryExecution2Fixture) run(t *testing.T) {
 	f.resp.Extensions = graphql.GetExtensions(ctx)
 
 	if len(f.errors) == 0 {
-		assert.Empty(t, f.resp.Errors)
+		require.Empty(t, f.resp.Errors)
 		jsonEqWithOrder(t, f.expected, string(f.resp.Data))
 	} else {
 		require.Equal(t, len(f.errors), len(f.resp.Errors))
 		for i := range f.errors {
 			delete(f.resp.Errors[i].Extensions, "serviceUrl")
-			assert.Equal(t, *f.errors[i], *f.resp.Errors[i])
+			require.Equal(t, *f.errors[i], *f.resp.Errors[i])
 		}
 	}
 }

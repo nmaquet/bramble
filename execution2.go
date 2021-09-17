@@ -560,6 +560,9 @@ func bubbleUpNullValuesInPlaceRec(schema *ast.Schema, currentType *ast.Type, sel
 			switch selection := selection.(type) {
 			case *ast.Field:
 				field := selection
+				if strings.HasPrefix(field.Name, "__") {
+					continue
+				}
 				value := result[field.Alias]
 				if value == nil {
 					if field.Definition.Type.NonNull {

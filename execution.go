@@ -304,10 +304,10 @@ func (s *ExecutableSchema) NewPipelineExecuteQuery(ctx context.Context) *graphql
 	AddField(ctx, "operation.type", op.Operation)
 
 	qe := newQueryExecution2(s.GraphqlClient, s.Schema(), s.BoundaryQueries)
-	results, errs := qe.Execute(ctx, *plan)
-	if len(errs) > 0 {
+	results, executeErrs := qe.Execute(ctx, *plan)
+	if len(executeErrs) > 0 {
 		return &graphql.Response{
-			Errors: errs,
+			Errors: executeErrs,
 		}
 	}
 
